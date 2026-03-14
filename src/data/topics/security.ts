@@ -32,6 +32,20 @@ export const securityTopic: Topic = {
             { text: 'Automatic key rotation retains old key material — old ciphertexts still decrypt. New data encrypted with new material', examTip: true },
             { text: 'Minimum 7-day deletion waiting period — gives time to detect and cancel accidental key deletion', examTip: true },
           ],
+          bestPractices: [
+            { pillar: 'security', text: 'Use separate KMS keys per classification level (PII, financial, general) and per environment (prod vs dev) to limit blast radius of key compromise and simplify compliance auditing' },
+            { pillar: 'security', text: 'Never use AWS managed keys for data you may need to share cross-account or revoke — only customer managed keys support cross-account key policies and granular revocation' },
+            { pillar: 'operational-excellence', text: 'Enable KMS key deletion alerts via CloudTrail + EventBridge — detect pending key deletions immediately to prevent accidental data loss' },
+            { pillar: 'cost-optimization', text: 'Use AWS managed keys for non-sensitive data where compliance does not require customer control — saves $1/month/key at scale across hundreds of services' },
+          ],
+          useCases: [
+            {
+              scenario: 'A multi-region application encrypts sensitive PII data in us-east-1 using KMS. The DR region (eu-west-1) needs to decrypt this data during a regional failover without re-encrypting all stored data.',
+              wrongChoices: ['Copy the KMS key to eu-west-1 — KMS keys cannot be exported or copied', 'Re-encrypt all data with a eu-west-1 key before failover — operationally infeasible for large datasets'],
+              correctChoice: 'Create a KMS Multi-Region Key (mrk-) with a replica in eu-west-1. Both regions share the same key material and key ID prefix — eu-west-1 can decrypt ciphertext created in us-east-1.',
+              reasoning: 'Multi-Region Keys replicate key material across regions while maintaining key policy control. This is the only way to decrypt KMS-encrypted data in a different region without re-encryption.',
+            },
+          ],
         },
         {
           id: 'sec-kms-envelope',
@@ -110,6 +124,27 @@ export const securityTopic: Topic = {
             { text: 'GuardDuty needs no agents — works from logs (CloudTrail, Flow Logs, DNS). Inspector needs SSM agent for EC2', examTip: true },
             { text: 'Security Hub aggregates findings from ALL security services into single pane. Required for multi-account security posture', examTip: true },
             { text: 'CloudTrail data events (S3 object access) are NOT enabled by default — must explicitly enable for forensic logging', gotcha: true },
+          ],
+          bestPractices: [
+            { pillar: 'security', text: 'Enable GuardDuty in ALL regions and ALL accounts via AWS Organizations delegated admin — threats are not limited to your primary region', detail: 'Use GuardDuty multi-account enrollment to centralize findings in a dedicated security account' },
+            { pillar: 'security', text: 'Create EventBridge rules on GuardDuty HIGH severity findings to auto-trigger response Lambda functions — isolate compromised instances, revoke credentials, notify security team' },
+            { pillar: 'operational-excellence', text: 'Configure a multi-account CloudTrail Organization trail from the management account — single trail covering all accounts, stored in a dedicated log archive account with S3 Object Lock' },
+            { pillar: 'security', text: 'Enable Macie on all S3 buckets containing customer data — GDPR/CCPA compliance requires knowing where PII lives. Automate remediation of public bucket findings via EventBridge' },
+            { pillar: 'reliability', text: 'Store GuardDuty, CloudTrail, and Config findings in a separate, immutable log archive account with an SCP preventing log deletion — ensures forensic integrity even if primary accounts are compromised' },
+          ],
+          useCases: [
+            {
+              scenario: 'Security team discovers that an IAM access key was accidentally committed to a public GitHub repository 3 hours ago. They need to determine what API calls were made with that key during that window.',
+              wrongChoices: ['Use GuardDuty — it detects threats going forward, not retroactive log analysis', 'Use Amazon Inspector — it scans for CVEs, not API call history'],
+              correctChoice: 'Query CloudTrail Lake or Athena-over-S3 for all API calls matching the compromised access key ID (AKIA...) in the 3-hour window. Use Amazon Detective to visualize the activity graph and identify affected resources.',
+              reasoning: 'CloudTrail records all API calls with the caller identity. Detective builds a behavioral graph from CloudTrail and GuardDuty data, making it easier to trace the blast radius of credential compromise.',
+            },
+            {
+              scenario: 'A startup has 15 AWS accounts across 3 OUs. The security team wants centralized visibility into misconfigurations (public S3 buckets, over-permissive security groups) and compliance against CIS AWS Foundations benchmark.',
+              wrongChoices: ['Deploy GuardDuty in each account and review individually', 'Use AWS Config rules in each account separately'],
+              correctChoice: 'Enable Security Hub with delegated admin from the management account, enable CIS AWS Foundations standard, and aggregate findings from all accounts into the security account.',
+              reasoning: 'Security Hub provides centralized CSPM (Cloud Security Posture Management), runs compliance checks against CIS/PCI/NIST standards, and aggregates findings from GuardDuty, Macie, Inspector across all accounts in the Organization.',
+            },
           ],
           comparisons: [
             {

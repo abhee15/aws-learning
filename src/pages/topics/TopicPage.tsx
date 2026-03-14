@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, BookOpen, BarChart3, Zap, Brain,
   CheckCircle2, AlertTriangle, Lightbulb, GitBranch, Target,
-  Clock, List, Star, BookMarked
+  Clock, List, Star, BookMarked, ShieldCheck, DollarSign,
+  Settings, Leaf, Activity, Gauge, Layers, ArrowDown, ThumbsUp, ThumbsDown
 } from 'lucide-react';
+import type { WAPillar } from '../../types/topic';
 import { getTopicBySlug, allTopics } from '../../data/topics';
 import { useProgress } from '../../context/ProgressContext';
 import { Tabs } from '../../components/ui/Tabs';
@@ -19,8 +21,19 @@ const TABS = [
   { id: 'diagrams', label: 'Diagrams', icon: <BarChart3 className="w-4 h-4" /> },
   { id: 'compare', label: 'Compare', icon: <GitBranch className="w-4 h-4" /> },
   { id: 'usecases', label: 'Use Cases', icon: <Target className="w-4 h-4" /> },
+  { id: 'bestpractices', label: 'Best Practices', icon: <ShieldCheck className="w-4 h-4" /> },
+  { id: 'architectures', label: 'Architectures', icon: <Layers className="w-4 h-4" /> },
   { id: 'mnemonics', label: 'Memory Aids', icon: <Zap className="w-4 h-4" /> },
 ];
+
+const PILLAR_META: Record<WAPillar, { label: string; color: string; bg: string; border: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  'operational-excellence': { label: 'Operational Excellence', color: 'text-blue-400', bg: 'bg-blue-900/15', border: 'border-blue-800/40', Icon: Settings },
+  'security':              { label: 'Security',               color: 'text-red-400',  bg: 'bg-red-900/15',  border: 'border-red-800/40',  Icon: ShieldCheck },
+  'reliability':           { label: 'Reliability',            color: 'text-green-400', bg: 'bg-green-900/15', border: 'border-green-800/40', Icon: Activity },
+  'performance':           { label: 'Performance Efficiency', color: 'text-purple-400', bg: 'bg-purple-900/15', border: 'border-purple-800/40', Icon: Gauge },
+  'cost-optimization':     { label: 'Cost Optimization',      color: 'text-yellow-400', bg: 'bg-yellow-900/15', border: 'border-yellow-800/40', Icon: DollarSign },
+  'sustainability':        { label: 'Sustainability',          color: 'text-emerald-400', bg: 'bg-emerald-900/15', border: 'border-emerald-800/40', Icon: Leaf },
+};
 
 function renderInline(text: string) {
   return text
@@ -28,17 +41,30 @@ function renderInline(text: string) {
     .replace(/`(.*?)`/g, '<code class="bg-gray-800 text-aws-orange px-1.5 py-0.5 rounded text-xs font-mono">$1</code>');
 }
 
+const NUMBERED_RE = /^(\d+)\.\s+/;
+
 function renderParagraph(para: string, pi: number) {
   const lines = para.split('\n');
-  type Seg = { type: 'text' | 'list'; content: string[] };
+  type SegType = 'text' | 'bullet' | 'numbered';
+  type Seg = { type: SegType; content: string[]; startNum?: number };
   const segments: Seg[] = [];
 
   for (const line of lines) {
-    if (line.startsWith('- ')) {
-      if (segments.length && segments[segments.length - 1].type === 'list') {
-        segments[segments.length - 1].content.push(line.slice(2));
+    const numMatch = line.match(NUMBERED_RE);
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      const text = line.slice(2);
+      if (segments.length && segments[segments.length - 1].type === 'bullet') {
+        segments[segments.length - 1].content.push(text);
       } else {
-        segments.push({ type: 'list', content: [line.slice(2)] });
+        segments.push({ type: 'bullet', content: [text] });
+      }
+    } else if (numMatch) {
+      const text = line.slice(numMatch[0].length);
+      const num = parseInt(numMatch[1], 10);
+      if (segments.length && segments[segments.length - 1].type === 'numbered') {
+        segments[segments.length - 1].content.push(text);
+      } else {
+        segments.push({ type: 'numbered', content: [text], startNum: num });
       }
     } else {
       if (segments.length && segments[segments.length - 1].type === 'text') {
@@ -51,22 +77,40 @@ function renderParagraph(para: string, pi: number) {
 
   return (
     <div key={pi} className="space-y-1.5">
-      {segments.map((seg, si) =>
-        seg.type === 'list' ? (
-          <ul key={si} className="space-y-1.5 mt-1">
-            {seg.content.map((item, ii) => (
-              <li key={ii} className="flex items-start gap-2.5">
-                <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-aws-orange/60 flex-shrink-0" />
-                <span className="text-sm text-gray-300 leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: renderInline(item) }} />
-              </li>
-            ))}
-          </ul>
-        ) : (
+      {segments.map((seg, si) => {
+        if (seg.type === 'bullet') {
+          return (
+            <ul key={si} className="space-y-1.5 mt-1">
+              {seg.content.map((item, ii) => (
+                <li key={ii} className="flex items-start gap-2.5">
+                  <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-aws-orange/60 flex-shrink-0" />
+                  <span className="text-sm text-gray-300 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: renderInline(item) }} />
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        if (seg.type === 'numbered') {
+          return (
+            <ol key={si} className="space-y-1.5 mt-1">
+              {seg.content.map((item, ii) => (
+                <li key={ii} className="flex items-start gap-2.5">
+                  <span className="mt-0.5 w-5 h-5 rounded bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] font-bold text-aws-orange flex-shrink-0">
+                    {(seg.startNum ?? 1) + ii}
+                  </span>
+                  <span className="text-sm text-gray-300 leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: renderInline(item) }} />
+                </li>
+              ))}
+            </ol>
+          );
+        }
+        return (
           <p key={si} className="text-sm text-gray-300 leading-relaxed"
             dangerouslySetInnerHTML={{ __html: renderInline(seg.content.join('\n')) }} />
-        )
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -121,6 +165,7 @@ export function TopicPage() {
   const allComparisons = allSections.flatMap(s => s.comparisons || []);
   const allUseCases = allSections.flatMap(s => s.useCases || []);
   const allMnemonics = allSections.flatMap(s => s.mnemonics || []);
+  const allBestPractices = allSections.flatMap(s => s.bestPractices || []);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -153,6 +198,8 @@ export function TopicPage() {
           ...t,
           count: t.id === 'compare' ? allComparisons.length || undefined :
                  t.id === 'usecases' ? allUseCases.length || undefined :
+                 t.id === 'bestpractices' ? allBestPractices.length || undefined :
+                 t.id === 'architectures' ? (topic.solutionArchitectures?.length) || undefined :
                  t.id === 'mnemonics' ? allMnemonics.length || undefined : undefined,
         }))} activeTab={activeTab} onChange={setActiveTab} />
       </div>
@@ -346,6 +393,149 @@ export function TopicPage() {
                         <span className="text-xs text-gray-400">{uc.reasoning}</span>
                       </div>
                     </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
+            {/* BEST PRACTICES */}
+            {activeTab === 'bestpractices' && (
+              <div className="space-y-5">
+                {allBestPractices.length === 0 ? (
+                  <div className="card p-12 text-center">
+                    <ShieldCheck className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                    <p className="text-gray-500">Best practices coming soon for this topic.</p>
+                  </div>
+                ) : (
+                  (Object.keys(PILLAR_META) as WAPillar[]).map(pillar => {
+                    const practices = allBestPractices.filter(bp => bp.pillar === pillar);
+                    if (practices.length === 0) return null;
+                    const meta = PILLAR_META[pillar];
+                    const Icon = meta.Icon;
+                    return (
+                      <motion.div key={pillar} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+                        className={`card p-5 border ${meta.border} ${meta.bg}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Icon className={`w-4 h-4 ${meta.color}`} />
+                          <h3 className={`font-semibold text-sm ${meta.color}`}>{meta.label}</h3>
+                          <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${meta.bg} ${meta.color} border ${meta.border}`}>{practices.length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {practices.map((bp, i) => (
+                            <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}
+                              className="flex items-start gap-2.5">
+                              <CheckCircle2 className={`w-3.5 h-3.5 ${meta.color} flex-shrink-0 mt-0.5`} />
+                              <div>
+                                <p className="text-sm text-gray-200">{bp.text}</p>
+                                {bp.detail && <p className="text-xs text-gray-500 mt-0.5">{bp.detail}</p>}
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* ARCHITECTURES */}
+            {activeTab === 'architectures' && (
+              <div className="space-y-6">
+                {!topic.solutionArchitectures?.length ? (
+                  <div className="card p-12 text-center">
+                    <Layers className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+                    <p className="text-gray-500">Reference architectures coming soon for this topic.</p>
+                  </div>
+                ) : topic.solutionArchitectures.map((arch, ai) => (
+                  <motion.div key={arch.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: ai * 0.1 }}
+                    className="card overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-900/20 to-transparent border-b border-gray-800 px-5 py-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Layers className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-white">{arch.title}</h3>
+                          <p className="text-sm text-gray-400 mt-1">{arch.description}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 ml-11">
+                        <span className="text-xs text-blue-300 bg-blue-900/30 border border-blue-800/40 px-2.5 py-1 rounded-full">
+                          When to use: {arch.useCase}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-5 grid md:grid-cols-2 gap-5">
+                      {/* Components */}
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2.5">Components</p>
+                        <div className="space-y-1.5">
+                          {arch.components.map((c, ci) => (
+                            <div key={ci} className="flex items-start gap-2 p-2 rounded-lg bg-gray-800/40">
+                              <span className="text-xs font-semibold text-aws-orange min-w-[80px] flex-shrink-0">{c.name}</span>
+                              <span className="text-xs text-gray-400">{c.role}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Data Flow */}
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2.5">Data Flow</p>
+                        <div className="space-y-1">
+                          {arch.dataFlow.map((step, si) => (
+                            <div key={si} className="flex items-start gap-2">
+                              <div className="flex flex-col items-center flex-shrink-0">
+                                <span className="w-5 h-5 rounded bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] font-bold text-aws-orange">{si + 1}</span>
+                                {si < arch.dataFlow.length - 1 && <ArrowDown className="w-2.5 h-2.5 text-gray-700 my-0.5" />}
+                              </div>
+                              <span className="text-xs text-gray-300 leading-relaxed pt-0.5">{step}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Key Decisions + Tradeoffs */}
+                    <div className="border-t border-gray-800 p-5 grid md:grid-cols-2 gap-5">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2.5">Key Design Decisions</p>
+                        <div className="space-y-1.5">
+                          {arch.keyDecisions.map((d, di) => (
+                            <div key={di} className="flex items-start gap-2">
+                              <Lightbulb className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                              <span className="text-xs text-gray-300">{d}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {arch.tradeoffs.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-2.5">Tradeoffs</p>
+                          <div className="space-y-1.5">
+                            {arch.tradeoffs.map((t, ti) => (
+                              <div key={ti} className="space-y-1">
+                                <div className="flex items-start gap-2">
+                                  <ThumbsUp className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" />
+                                  <span className="text-xs text-green-300">{t.pro}</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <ThumbsDown className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+                                  <span className="text-xs text-red-300">{t.con}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {arch.examAngle && (
+                      <div className="border-t border-gray-800 px-5 py-3 bg-yellow-900/5">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                          <span className="text-xs text-yellow-300"><span className="font-semibold">Exam angle: </span>{arch.examAngle}</span>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </div>

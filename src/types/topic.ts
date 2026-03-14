@@ -37,6 +37,20 @@ export interface UseCaseScenario {
   reasoning: string;
 }
 
+export type WAPillar =
+  | 'operational-excellence'
+  | 'security'
+  | 'reliability'
+  | 'performance'
+  | 'cost-optimization'
+  | 'sustainability';
+
+export interface BestPractice {
+  text: string;
+  pillar: WAPillar;
+  detail?: string;
+}
+
 export interface Section {
   id: string;
   title: string;
@@ -46,12 +60,30 @@ export interface Section {
   comparisons?: { headers: string[]; rows: string[][] }[];
   useCases?: UseCaseScenario[];
   mnemonics?: MnemonicEntry[];
+  bestPractices?: BestPractice[];
 }
 
 export interface Subtopic {
   id: string;
   title: string;
   sections: Section[];
+}
+
+export interface ArchitectureComponent {
+  name: string;
+  role: string;
+}
+
+export interface SolutionArchitecture {
+  id: string;
+  title: string;
+  description: string;
+  useCase: string;
+  components: ArchitectureComponent[];
+  dataFlow: string[];
+  keyDecisions: string[];
+  tradeoffs: { pro: string; con: string }[];
+  examAngle?: string;
 }
 
 export interface Topic {
@@ -66,4 +98,5 @@ export interface Topic {
   subtopics: Subtopic[];
   summaryBullets: string[];
   relatedTopics: string[];
+  solutionArchitectures?: SolutionArchitecture[];
 }

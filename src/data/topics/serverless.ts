@@ -17,6 +17,103 @@ export const serverlessTopic: Topic = {
     'SQS visibility timeout must be >= Lambda timeout to prevent duplicate processing',
   ],
   relatedTopics: ['databases', 'messaging', 'security'],
+  solutionArchitectures: [
+    {
+      id: 'sv-arch-async-api',
+      title: 'Async API with Job Polling Pattern',
+      description: 'Decouples long-running backend processing from synchronous HTTP responses using SQS + Lambda. The API returns immediately with a job ID; clients poll for completion.',
+      useCase: 'Document processing, ML inference, report generation — any operation exceeding API Gateway\'s 29-second hard timeout',
+      components: [
+        { name: 'API Gateway', role: 'REST API — accepts POST /jobs, returns 202 Accepted + job ID. GET /jobs/{id} returns current status' },
+        { name: 'Lambda (intake)', role: 'Validates request, writes job record to DynamoDB (status=PENDING), publishes message to SQS' },
+        { name: 'SQS Queue', role: 'Durable buffer between intake and processing. Decouples caller from worker throughput' },
+        { name: 'Lambda (worker)', role: 'Polls SQS, processes job, writes result to DynamoDB (status=COMPLETE), publishes completion event to EventBridge' },
+        { name: 'DynamoDB', role: 'Job status store — PK=jobId, attributes: status, createdAt, result, error' },
+        { name: 'EventBridge', role: 'Optional: fan-out completion events to SNS (email), SQS (downstream systems), or WebSocket callback' },
+      ],
+      dataFlow: [
+        'Client → POST /process → API Gateway → Lambda (intake): validate + write DynamoDB status=PENDING + enqueue SQS → return 202 + jobId',
+        'SQS → Lambda (worker): fetch job details, execute long-running processing',
+        'Lambda (worker) → DynamoDB: update status=COMPLETE, write result',
+        'Lambda (worker) → EventBridge: publish job.completed event',
+        'Client → GET /jobs/{jobId} → Lambda (status) → DynamoDB → return status + result when complete',
+      ],
+      keyDecisions: [
+        'SQS visibility timeout = 6× Lambda worker timeout — prevents duplicate processing during execution',
+        'DynamoDB TTL on job records — auto-expire results after 24-48 hours to control storage costs',
+        'SQS Dead Letter Queue with CloudWatch alarm — capture and alert on processing failures',
+        'Use SQS FIFO only if job ordering matters within a group — Standard queue is cheaper and scales better',
+      ],
+      tradeoffs: [
+        { pro: 'Handles operations of any duration without timeout constraints', con: 'Client complexity — must implement polling or WebSocket listener' },
+        { pro: 'Worker failures don\'t affect API availability; queue absorbs traffic spikes', con: 'Eventually consistent result delivery — not suitable for real-time interactive operations' },
+      ],
+      examAngle: 'When a question describes operations exceeding 29 seconds OR "decouple processing from the API response", the async job pattern (SQS + polling or WebSocket callback) is the answer. Never "increase API Gateway timeout".',
+    },
+    {
+      id: 'sv-arch-event-driven-microservices',
+      title: 'Event-Driven Microservices with EventBridge',
+      description: 'Loosely coupled microservices communicate through a central event bus. Each service publishes domain events; subscribers react independently without direct service coupling.',
+      useCase: 'Multi-service e-commerce platforms, order management systems, any system where services must react to changes in other services without tight coupling',
+      components: [
+        { name: 'Service A (Order)', role: 'Publishes domain events to EventBridge custom bus: order.created, order.cancelled, order.shipped' },
+        { name: 'EventBridge Bus', role: 'Central event router — rules match events by source/detail-type/detail fields and route to targets' },
+        { name: 'Service B (Inventory)', role: 'Subscribes to order.created → reserve stock. Subscribes to order.cancelled → release stock' },
+        { name: 'Service C (Notifications)', role: 'Subscribes to order.shipped → send customer email/SMS via SES/SNS' },
+        { name: 'Service D (Analytics)', role: 'Subscribes to all order events → write to Kinesis Data Firehose → S3 → Athena' },
+        { name: 'EventBridge Archive', role: 'Archives all events for 30 days — enables replay to backfill new services or recover from bugs' },
+      ],
+      dataFlow: [
+        'Order service publishes PutEvents to EventBridge custom bus with detail-type="order.created"',
+        'EventBridge evaluates all rules — rule for Inventory (source=order-service, detail-type=order.created) matches',
+        'EventBridge invokes Inventory Lambda, Notifications Lambda, Analytics Kinesis in parallel (fan-out)',
+        'Each service processes the event independently — failures in one service do not affect others',
+        'Failed deliveries retry with exponential backoff — configure dead-letter SQS per rule target',
+      ],
+      keyDecisions: [
+        'EventBridge Pipes for point-to-point (single source → single target with filtering/enrichment)',
+        'Event Bus rules for fan-out (one event → multiple services in parallel)',
+        'Schema Registry: define and enforce event contracts — prevent schema drift breaking consumers',
+        'Archive + Replay: replay events after consumer bug fix to reprocess historical events',
+      ],
+      tradeoffs: [
+        { pro: 'Services are fully decoupled — adding new consumers requires no changes to producers', con: 'Eventual consistency — consumers may process events out of order or with delay' },
+        { pro: 'Event Archive enables replaying history for new services or disaster recovery', con: 'Debugging distributed event flows requires centralized observability (X-Ray, CloudWatch)' },
+      ],
+      examAngle: 'EventBridge Pipes vs Event Bus rules is a common exam question. Pipes = one source → one target with optional Lambda enrichment. Bus rules = one-to-many fan-out. Archive/Replay solves "new service needs historical data" scenarios.',
+    },
+    {
+      id: 'sv-arch-saga-pattern',
+      title: 'Saga Pattern with Step Functions',
+      description: 'Manages distributed transactions across multiple microservices using choreography or orchestration. Each step either completes successfully or triggers compensating transactions to roll back.',
+      useCase: 'Multi-step financial transactions, travel booking (flight + hotel + car), order fulfillment requiring atomic business operations across independent services',
+      components: [
+        { name: 'Step Functions', role: 'Orchestrator — defines the saga as a state machine with Task states for each service call and Catch states for compensation' },
+        { name: 'Lambda (each step)', role: 'Calls downstream service (payment, inventory, shipping). Returns success or throws error to trigger compensation' },
+        { name: 'Compensation Lambdas', role: 'Reverse operations: refund payment, release inventory, cancel shipment. Invoked by Catch states on failure' },
+        { name: 'DynamoDB', role: 'Saga log — records each step completion for idempotency. Prevents duplicate charges on retry' },
+        { name: 'SQS (per service)', role: 'Optional buffer between saga steps and services for backpressure management' },
+      ],
+      dataFlow: [
+        'Client triggers saga → Step Functions starts execution with order details as input',
+        'State 1: Reserve Inventory Lambda → success → continue. Failure → jump to compensation flow',
+        'State 2: Charge Payment Lambda → success → continue. Failure → invoke Release Inventory + return error',
+        'State 3: Schedule Shipment Lambda → success → mark saga COMPLETE',
+        'Any failure triggers Catch → executes compensating transactions in reverse order → saga marked FAILED with reason',
+      ],
+      keyDecisions: [
+        'Use Standard Workflows for exactly-once execution semantics — critical for payment operations',
+        'Design all operations to be idempotent — retries must not cause double-charges (use DynamoDB conditional writes)',
+        'Compensating transactions must also be idempotent — partial rollbacks on compensation failure must be safe to retry',
+        'waitForTaskToken for async steps (e.g., payment processor webhook) — pauses saga until callback',
+      ],
+      tradeoffs: [
+        { pro: 'Provides distributed transaction semantics without a 2-phase commit or distributed DB', con: 'Compensation logic must be designed upfront — harder to add retroactively' },
+        { pro: 'Visual execution history in Step Functions console aids debugging', con: 'Eventual consistency during saga execution — intermediate states are visible' },
+      ],
+      examAngle: 'When a question involves coordinating multiple services into an atomic business transaction with rollback capability, Step Functions Saga is the answer. Standard Workflow (not Express) for exactly-once payment semantics.',
+    },
+  ],
   subtopics: [
     {
       id: 'sv-lambda',
@@ -31,6 +128,26 @@ export const serverlessTopic: Topic = {
             { text: 'Provisioned Concurrency = pre-warmed, no cold starts. Costs even when not invoked', examTip: true },
             { text: 'Reserve concurrency for Lambda functions that call rate-limited downstream services (e.g., RDS, external APIs)', examTip: true },
             { text: 'Account-level concurrency limit (default 1000/region) is shared across all functions — one function can starve others', gotcha: true },
+          ],
+          bestPractices: [
+            { pillar: 'reliability', text: 'Set reserved concurrency on critical functions to guarantee capacity even when other functions scale unexpectedly', detail: 'Prevents noisy-neighbor starvation within the shared account concurrency pool' },
+            { pillar: 'performance', text: 'Use Provisioned Concurrency with Application Auto Scaling for latency-sensitive APIs instead of always-on provisioning', detail: 'Schedule scale-up before known traffic peaks (market open, batch jobs) to minimize idle cost' },
+            { pillar: 'cost-optimization', text: 'Monitor concurrency metrics and right-size reserved concurrency — over-reserving blocks capacity from other functions unnecessarily' },
+            { pillar: 'operational-excellence', text: 'Set CloudWatch alarms on ConcurrencyLimitExceeded to detect throttling before it impacts users' },
+          ],
+          useCases: [
+            {
+              scenario: 'A trading platform Lambda processes market orders and calls a rate-limited external pricing API (max 50 req/s). During peak hours, Lambda scales to 200+ concurrent executions and the pricing API starts rejecting calls with 429 errors.',
+              wrongChoices: ['Increase the pricing API rate limit (you don\'t control it)', 'Use Provisioned Concurrency to fix the 429 errors'],
+              correctChoice: 'Set Reserved Concurrency on the Lambda to cap it at 50 concurrent executions, matching the pricing API limit',
+              reasoning: 'Reserved Concurrency caps max concurrent executions, protecting the downstream rate-limited API. Provisioned Concurrency warms up instances — it does not limit throughput.',
+            },
+            {
+              scenario: 'A user-facing checkout API Lambda is experiencing 300-500ms cold starts during flash sales when traffic spikes from near-zero. P99 latency is unacceptable.',
+              wrongChoices: ['Use Reserved Concurrency to eliminate cold starts', 'Increase Lambda memory allocation (cold start is JVM init, not memory-bound)'],
+              correctChoice: 'Enable Provisioned Concurrency and configure Application Auto Scaling to scale up 15 minutes before known sale windows',
+              reasoning: 'Provisioned Concurrency pre-warms execution environments, eliminating cold starts. Auto Scaling avoids paying for idle provisioned capacity between sales.',
+            },
           ],
         },
         {
@@ -53,6 +170,20 @@ export const serverlessTopic: Topic = {
             { text: 'Kinesis parallelization factor (up to 10 per shard) allows up to 10 concurrent Lambda invocations per shard for higher throughput', examTip: true },
             { text: 'For partial batch failure (SQS FIFO): report batch item failures so Lambda only retries failed items, not the whole batch', examTip: true },
           ],
+          bestPractices: [
+            { pillar: 'reliability', text: 'Always configure a Dead Letter Queue (SQS or SNS) on async Lambda invocations to capture and inspect failed events', detail: 'Without a DLQ, failed async invocations are silently discarded after 2 retries' },
+            { pillar: 'reliability', text: 'Set SQS visibility timeout to at least 6× the Lambda function timeout to prevent duplicate processing during execution' },
+            { pillar: 'performance', text: 'Use Kinesis parallelization factor (up to 10) to scale Lambda concurrency without adding shards — lower cost than re-sharding' },
+            { pillar: 'operational-excellence', text: 'Enable partial batch failure reporting for SQS event sources to avoid reprocessing successfully handled messages on partial failures' },
+          ],
+          useCases: [
+            {
+              scenario: 'An S3 event triggers a Lambda to process uploaded files. Files occasionally fail processing due to transient downstream errors. The team is losing events because failed invocations produce no alerts.',
+              wrongChoices: ['Use SQS as the Lambda trigger instead (changes the architecture)', 'Increase Lambda timeout and retry count'],
+              correctChoice: 'Configure a Dead Letter Queue on the async Lambda event source mapping and set an SNS/CloudWatch alarm on the DLQ depth',
+              reasoning: 'S3 events trigger Lambda asynchronously. After 2 retries, failures are dropped unless a DLQ is configured. The DLQ captures failed events for investigation and reprocessing.',
+            },
+          ],
         },
       ],
     },
@@ -68,6 +199,27 @@ export const serverlessTopic: Topic = {
             { text: 'API Gateway 29-second timeout is a HARD limit — cannot be increased. Design long operations to be async', gotcha: true },
             { text: 'HTTP API is ~70% cheaper than REST API but lacks caching, WAF, request transformation, and usage plans', examTip: true },
             { text: 'Private API Gateway with VPC endpoint — resource policy required to allow VPC endpoint access', examTip: true },
+          ],
+          bestPractices: [
+            { pillar: 'security', text: 'Attach WAF WebACL to REST APIs in production for OWASP protection and rate limiting at the edge', detail: 'HTTP API does not support WAF — use REST API if WAF is a security requirement' },
+            { pillar: 'cost-optimization', text: 'Prefer HTTP API over REST API for simple Lambda proxy integrations — 70% cheaper with identical core functionality' },
+            { pillar: 'reliability', text: 'Design operations exceeding 29 seconds as async workflows: accept request → return 202 → use SQS/Step Functions → poll or webhook for result' },
+            { pillar: 'performance', text: 'Enable API Gateway caching for read-heavy endpoints with stable responses — reduces Lambda invocations and downstream DB load' },
+            { pillar: 'operational-excellence', text: 'Use API Gateway Access Logging to CloudWatch for per-request visibility including latency, status codes, and caller identity' },
+          ],
+          useCases: [
+            {
+              scenario: 'A mobile app backend needs per-user rate limiting (100 req/min per user), request body validation, and must integrate with a WAF for OWASP protection.',
+              wrongChoices: ['Use HTTP API — it supports JWT but not WAF or usage plans', 'Use WebSocket API — it\'s for real-time bidirectional communication'],
+              correctChoice: 'Use REST API with WAF WebACL attachment, Lambda authorizer for per-user identity, and Usage Plans with API Keys for rate limiting',
+              reasoning: 'Only REST API supports WAF integration, usage plans, and request validation. HTTP API is cheaper but lacks these enterprise features.',
+            },
+            {
+              scenario: 'A document processing endpoint takes 3-4 minutes to complete. API Gateway returns 504 timeout errors on every request.',
+              wrongChoices: ['Increase API Gateway timeout beyond 29 seconds', 'Increase Lambda timeout to match processing time'],
+              correctChoice: 'Refactor to async: API Gateway → Lambda returns 202 with job ID, SQS → processing Lambda → DynamoDB result store, client polls /status/{jobId}',
+              reasoning: 'API Gateway has a hard 29-second limit. Long-running operations must be decoupled using an async pattern with polling or WebSocket callbacks.',
+            },
           ],
           comparisons: [
             {
@@ -107,6 +259,21 @@ export const serverlessTopic: Topic = {
             { text: 'Standard = exactly-once, up to 1yr, history in console. Express = at-least-once, max 5min, history in CloudWatch only', examTip: true },
             { text: 'waitForTaskToken enables async human-in-the-loop or external system integrations without polling', examTip: true },
             { text: 'Map state has concurrency limit — set maxConcurrency to avoid overwhelming downstream services', gotcha: true },
+          ],
+          bestPractices: [
+            { pillar: 'reliability', text: 'Add Retry and Catch blocks to every Task state in production workflows — Lambda throttles, transient API failures, and timeouts are common', detail: 'Use exponential backoff (intervalSeconds, backoffRate, maxAttempts) to avoid hammering downstream services' },
+            { pillar: 'reliability', text: 'Set maxConcurrency on Map states to prevent fan-out from overwhelming downstream databases or APIs' },
+            { pillar: 'cost-optimization', text: 'Use Express Workflows for high-volume, short-duration event processing (IoT, streaming) — per-duration pricing is orders of magnitude cheaper than per-state-transition Standard pricing at scale' },
+            { pillar: 'operational-excellence', text: 'Enable CloudWatch logging for Express Workflows — unlike Standard, execution history is not stored in the console' },
+            { pillar: 'security', text: 'Limit Step Functions IAM role permissions to only the specific services and resources accessed in the workflow — avoid wildcard resource ARNs' },
+          ],
+          useCases: [
+            {
+              scenario: 'An e-commerce order fulfillment workflow involves: payment processing, inventory reservation, shipping label generation, and customer notification. The workflow can take up to 30 minutes if shipping label API is slow. Every order must be processed exactly once.',
+              wrongChoices: ['Express Workflow — at-least-once semantics could process an order payment twice', 'Lambda orchestration — hard to manage timeouts, retries, and state'],
+              correctChoice: 'Standard Workflow with Task states for each step, Retry on transient errors, and Catch blocks that redirect to compensation states on failure',
+              reasoning: 'Standard Workflows provide exactly-once execution and audit trail. Long duration (up to 1yr) handles slow external services. Retry/Catch handles transient failures without custom code.',
+            },
           ],
           comparisons: [
             {

@@ -17,6 +17,68 @@ export const databasesTopic: Topic = {
     'DynamoDB DAX for microsecond reads; does NOT help write-heavy or strongly-consistent workloads',
   ],
   relatedTopics: ['serverless', 'security', 'networking'],
+  solutionArchitectures: [
+    {
+      id: 'db-arch-cqrs',
+      title: 'CQRS with DynamoDB + OpenSearch',
+      description: 'Separates command (write) and query (read) paths. DynamoDB handles high-throughput writes; OpenSearch provides rich full-text search and complex queries. DynamoDB Streams keeps them in sync.',
+      useCase: 'Product catalogs needing full-text search, e-commerce with complex filtering, any workload where DynamoDB\'s key-based query model is insufficient for read patterns',
+      components: [
+        { name: 'DynamoDB (Command)', role: 'Primary write store — single-digit ms writes, infinite scale. Partition key designed for write distribution' },
+        { name: 'DynamoDB Streams', role: 'Captures every insert/update/delete as an ordered stream (24hr retention). NEW_AND_OLD_IMAGES stream view for full change capture' },
+        { name: 'Lambda (sync)', role: 'Triggered by DynamoDB Streams — transforms change records and indexes them into OpenSearch. Handles retries on OpenSearch failures' },
+        { name: 'OpenSearch (Query)', role: 'Full-text search index. Handles complex queries: fuzzy search, faceted filtering, geo-distance, aggregations — patterns impossible in DynamoDB' },
+        { name: 'API Gateway', role: 'Routes write requests to DynamoDB service and read/search requests to OpenSearch query Lambda' },
+      ],
+      dataFlow: [
+        'Write: Client → API Gateway → Lambda → DynamoDB PutItem (synchronous, 1-digit ms response)',
+        'Sync: DynamoDB Streams → Lambda (async) → OpenSearch IndexDocument (typically <1s lag)',
+        'Read: Client → API Gateway → Lambda → OpenSearch query → return results with pagination',
+        'On OpenSearch failure: Lambda retries (3 attempts) → sends to SQS DLQ → CloudWatch alarm → manual reprocessing',
+      ],
+      keyDecisions: [
+        'Use TRIM_HORIZON iterator on Streams → ensures all historical changes are processed if sync Lambda has downtime',
+        'Idempotent OpenSearch writes — use DynamoDB item version as OpenSearch document version to handle duplicate stream events',
+        'Consider ElasticSearch index templates for field mapping — prevent mapping explosions from dynamic field types',
+        'OpenSearch is eventually consistent with DynamoDB — communicate this to frontend; stale search results are expected immediately after writes',
+      ],
+      tradeoffs: [
+        { pro: 'DynamoDB scales writes infinitely; OpenSearch scales complex reads independently', con: 'Eventual consistency between stores — reads may lag writes by up to 1-2 seconds' },
+        { pro: 'Each store is optimized for its workload — best cost/performance profile', con: 'Operational complexity: two data stores, sync Lambda, DLQ handling, index mapping management' },
+      ],
+      examAngle: 'When a question describes DynamoDB for writes + need for "full-text search" or "complex query capabilities" → DynamoDB Streams + Lambda + OpenSearch. The Streams Lambda must be idempotent because Streams delivers events at-least-once.',
+    },
+    {
+      id: 'db-arch-global-active-active',
+      title: 'Multi-Region Active-Active with DynamoDB Global Tables',
+      description: 'DynamoDB Global Tables replicate data across multiple AWS regions with multi-active writes. Any region can accept reads and writes — no primary/secondary topology.',
+      useCase: 'Global applications requiring low-latency reads and writes from multiple continents, gaming leaderboards, session stores, applications needing regional isolation for data residency compliance',
+      components: [
+        { name: 'DynamoDB Global Table', role: 'Single table replicated across 3+ regions. Each replica is a full copy. All replicas accept reads and writes.' },
+        { name: 'DynamoDB Streams', role: 'Underlying replication mechanism — changes in each region stream to all other regions via the Global Tables replication infrastructure' },
+        { name: 'Route 53 Latency Routing', role: 'Routes clients to nearest region\'s API endpoint. Automatically fails over to next-nearest region if health check fails' },
+        { name: 'Lambda (per region)', role: 'Regional compute — executes in the same region as the user\'s DynamoDB write to minimize cross-region round trips' },
+        { name: 'DAX (optional)', role: 'Per-region in-memory cache for read-heavy hot items — microsecond reads without hitting DynamoDB replication lag' },
+      ],
+      dataFlow: [
+        'Client in EU → Route 53 latency routing → eu-west-1 API endpoint → Lambda → DynamoDB eu-west-1 replica write',
+        'DynamoDB eu-west-1 → Global Tables replication stream → us-east-1 and ap-southeast-1 replicas (typically <1s)',
+        'Client in APAC → Route 53 → ap-southeast-1 → reads local replica (may see replication lag <1s)',
+        'Conflict: two regions write same item simultaneously → last-writer-wins (timestamp-based). Application must tolerate this.',
+      ],
+      keyDecisions: [
+        'Design items to avoid write conflicts — use append-only patterns, version counters, or condition expressions',
+        'Avoid cross-region transactions — DynamoDB transactions are single-region only',
+        'Use version attribute + conditional writes to implement optimistic locking and detect conflicts at application level',
+        'Global Tables require streams enabled on all replicas — do not disable streams on individual replicas',
+      ],
+      tradeoffs: [
+        { pro: 'True active-active: any region can accept writes — no primary bottleneck or failover promotion required', con: 'Last-writer-wins conflict resolution — not suitable for financial transactions or inventory management requiring conflict merging' },
+        { pro: 'Sub-second RPO globally — replication is near real-time via Streams infrastructure', con: 'Cost: each write is replicated to all regions (N writes for N regions) — cost scales linearly with region count' },
+      ],
+      examAngle: 'DynamoDB Global Tables = multi-active (all regions read+write). Last-writer-wins conflict resolution. NOT suitable for financial operations requiring ACID across regions. Compare to Aurora Global Database (single writer, readable secondaries, <1s RPO, ~1min RTO for failover).',
+    },
+  ],
   subtopics: [
     {
       id: 'db-rds',
@@ -32,6 +94,21 @@ export const databasesTopic: Topic = {
             { text: 'Read replicas use asynchronous replication — lag possible. Promote to standalone breaks replication permanently', examTip: true },
             { text: 'Restoring from snapshot creates a NEW DB instance — existing instance is not modified', examTip: true },
           ],
+          bestPractices: [
+            { pillar: 'reliability', text: 'Always enable Multi-AZ for production RDS instances — synchronous standby ensures automatic failover within 60-120 seconds without manual intervention' },
+            { pillar: 'reliability', text: 'Test failover regularly by rebooting with forced failover (via console or CLI) to validate application reconnection logic and connection pool behavior' },
+            { pillar: 'operational-excellence', text: 'Set automated backup retention to maximum 35 days for production databases and enable CloudWatch alarms on FreeStorageSpace and DatabaseConnections' },
+            { pillar: 'cost-optimization', text: 'Place read replicas in the same region as application read traffic — cross-region replicas incur data transfer costs on every replicated write' },
+            { pillar: 'performance', text: 'Use RDS Proxy in front of RDS for Lambda-connected databases — Lambda creates new connections per invocation, exhausting connection pools' },
+          ],
+          useCases: [
+            {
+              scenario: 'A SaaS application runs on RDS MySQL in us-east-1. During a planned maintenance window, the DB underwent Multi-AZ failover. The application experienced 5+ minutes of connection errors despite Multi-AZ being enabled.',
+              wrongChoices: ['Multi-AZ failover takes longer than expected — this is normal', 'The standby replica had replication lag'],
+              correctChoice: 'The application connection pool was not configured to reconnect — it held onto stale connections to the old primary endpoint. Fix: configure connection pool retry and use the cluster endpoint (not static IP)',
+              reasoning: 'Multi-AZ failover takes 60-120 seconds. Application must handle reconnection via the RDS DNS endpoint (which updates to new primary). Applications with hardcoded IPs or non-retrying pools will fail longer.',
+            },
+          ],
         },
         {
           id: 'db-aurora',
@@ -43,6 +120,21 @@ export const databasesTopic: Topic = {
             { text: 'Aurora Serverless v2 supports read replicas and Global Database — v1 did not', examTip: true },
             { text: 'Aurora reader endpoint load-balances across ALL replicas including provisioned and Serverless v2 — not just one', examTip: true },
             { text: 'Aurora Multi-Master writes to all nodes — application must handle write conflicts. Not widely used; prefer Global DB for cross-region writes', gotcha: true },
+          ],
+          bestPractices: [
+            { pillar: 'reliability', text: 'Use Aurora Global Database for cross-region DR with <1s RPO — pre-provision the secondary region so promotion completes in ~1 minute during a regional failure' },
+            { pillar: 'performance', text: 'Use custom Aurora endpoints to route analytics/reporting queries to dedicated larger-instance replicas, isolating OLAP load from OLTP primary' },
+            { pillar: 'cost-optimization', text: 'Use Aurora Serverless v2 for development, staging, and variable-load workloads — scales to 0.5 ACU minimum and eliminates always-on instance costs' },
+            { pillar: 'operational-excellence', text: 'Enable Aurora enhanced monitoring and Performance Insights to identify slow queries, wait events, and connection bottlenecks before they cause user-facing issues' },
+            { pillar: 'security', text: 'Enable IAM database authentication for Lambda→Aurora connections — eliminates credential management and rotates auth tokens automatically (15-min TTL)' },
+          ],
+          useCases: [
+            {
+              scenario: 'A global fintech app needs a relational database that can serve read traffic from EU and APAC regions with minimal latency, while writes originate only from us-east-1. RPO must be under 5 seconds.',
+              wrongChoices: ['RDS cross-region read replicas — asynchronous replication can have seconds-to-minutes lag under write load', 'Aurora Multi-Master — conflict resolution complexity is too high for financial transactions'],
+              correctChoice: 'Aurora Global Database with primary in us-east-1 and secondary read clusters in eu-west-1 and ap-southeast-1. Storage-level replication achieves <1s RPO.',
+              reasoning: 'Aurora Global Database uses dedicated replication infrastructure at the storage layer, achieving sub-second cross-region replication. Read traffic routes to local secondary clusters, writes always go to the primary.',
+            },
           ],
           comparisons: [
             {
@@ -83,6 +175,20 @@ export const databasesTopic: Topic = {
             { text: 'Single Table Design requires knowing all access patterns upfront — flexible but hard to change', examTip: true },
             { text: 'Each partition: max 3,000 RCU + 1,000 WCU. Items with same PK share partition capacity', gotcha: true },
             { text: 'Sparse GSI: only items with the indexed attribute appear — filter without scanning the full table', examTip: true },
+          ],
+          bestPractices: [
+            { pillar: 'performance', text: 'Design partition keys for maximum cardinality and even distribution — use composite keys like userId+timestamp or add a random suffix (write sharding) for write-heavy hot keys', detail: 'Hot partitions are the #1 cause of DynamoDB throttling in production' },
+            { pillar: 'performance', text: 'Document all access patterns before designing the table — DynamoDB schema is access-pattern driven, unlike relational design which is entity driven' },
+            { pillar: 'cost-optimization', text: 'Use sparse GSIs for filtering a small subset of items (e.g., only pending orders) — only indexed items consume GSI storage, making queries cheap and selective' },
+            { pillar: 'operational-excellence', text: 'Use DynamoDB Streams + Lambda for event-driven side effects (notifications, search indexing, audit logs) rather than synchronous dual-writes from application code' },
+          ],
+          useCases: [
+            {
+              scenario: 'A social media app stores posts with userId as the DynamoDB partition key. A celebrity user with 10M followers generates 50,000 writes/second to their partition during a viral event, causing sustained ProvisionedThroughputExceededException errors.',
+              wrongChoices: ['Increase table-level WCU — the limit is per partition (1,000 WCU), not per table', 'Switch to On-Demand mode — still limited to 1,000 WCU per partition'],
+              correctChoice: 'Write sharding: append a random suffix (0-9) to the userId partition key on write, then scatter-gather across all 10 shards on read. Reduces per-partition write rate by 10x.',
+              reasoning: 'Hot partitions are a fundamental DynamoDB constraint (1,000 WCU per partition). Neither On-Demand nor increased provisioning fixes hot partitions — you must distribute writes across multiple partition key values.',
+            },
           ],
         },
         {
@@ -144,6 +250,21 @@ export const databasesTopic: Topic = {
             { text: 'Redis sorted sets enable leaderboards/rate limiting in O(log N). Exam often asks about this specific use case', examTip: true },
             { text: 'Memcached is multi-threaded — can use all CPU cores on large instances. Redis (single-threaded core) cannot', examTip: true },
             { text: 'Redis Cluster Mode Enabled: shards writes across multiple nodes. Cluster Mode Disabled: single shard (read replicas only for scale)', examTip: true },
+          ],
+          bestPractices: [
+            { pillar: 'reliability', text: 'Enable Multi-AZ with automatic failover for Redis in production — a single-node Redis cluster losing its primary causes complete cache unavailability', detail: 'Application must handle cache misses gracefully during failover (≈30s)' },
+            { pillar: 'reliability', text: 'Always design the application to handle Redis cache misses — never architect a system where cache unavailability causes complete outage (cache stampede protection)' },
+            { pillar: 'performance', text: 'Use Redis Cluster Mode Enabled (sharding) when single-shard dataset exceeds ~200GB or when write throughput exceeds single-node capacity' },
+            { pillar: 'security', text: 'Enable Redis AUTH and in-transit encryption (TLS) for all production clusters — ElastiCache Redis is VPC-only but defense-in-depth requires auth even within the VPC' },
+            { pillar: 'cost-optimization', text: 'Set appropriate TTLs on all cached objects and monitor eviction metrics — high eviction rates indicate under-provisioned cache size, leading to excessive DB load' },
+          ],
+          useCases: [
+            {
+              scenario: 'A gaming leaderboard needs to rank 10 million players in real-time, support "get rank of player X", and return "top 100 players" queries in under 10ms.',
+              wrongChoices: ['RDS with ORDER BY queries — full table scans at 10M rows are too slow', 'DynamoDB with scan + sort — scans are expensive and slow at scale', 'Memcached — no sorted set data structure'],
+              correctChoice: 'ElastiCache Redis sorted sets: ZADD to update scores, ZRANK to get a player\'s rank, ZREVRANGE to get top-N players — all O(log N) operations.',
+              reasoning: 'Redis sorted sets are purpose-built for ranked data. O(log N) operations against an in-memory dataset delivers consistent sub-millisecond performance regardless of dataset size.',
+            },
           ],
           comparisons: [
             {
