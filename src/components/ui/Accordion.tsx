@@ -12,11 +12,14 @@ interface AccordionItem {
 interface AccordionProps {
   items: AccordionItem[];
   allowMultiple?: boolean;
+  defaultOpenId?: string;
   className?: string;
 }
 
-export function Accordion({ items, allowMultiple = false, className = '' }: AccordionProps) {
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+export function Accordion({ items, allowMultiple = false, defaultOpenId, className = '' }: AccordionProps) {
+  const [openIds, setOpenIds] = useState<Set<string>>(
+    () => new Set(defaultOpenId ? [defaultOpenId] : [])
+  );
 
   const toggle = (id: string) => {
     setOpenIds(prev => {

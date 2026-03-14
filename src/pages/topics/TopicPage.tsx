@@ -79,6 +79,11 @@ export function TopicPage() {
   const [DiagramComponents, setDiagramComponents] = useState<React.ComponentType[]>([]);
 
   React.useEffect(() => {
+    setActiveTab('overview');
+    setDiagramComponents([]);
+  }, [slug]);
+
+  React.useEffect(() => {
     if (activeTab !== 'diagrams') return;
     const load = async () => {
       const components: React.ComponentType[] = [];
@@ -229,7 +234,7 @@ export function TopicPage() {
                       </div>
                       <h2 className="font-bold text-white">{subtopic.title}</h2>
                     </div>
-                    <Accordion allowMultiple items={subtopic.sections.map(section => ({
+                    <Accordion allowMultiple defaultOpenId={subtopic.sections[0]?.id} items={subtopic.sections.map(section => ({
                       id: section.id,
                       title: section.title,
                       badge: readSections.includes(section.id) ? 'Read' : undefined,
