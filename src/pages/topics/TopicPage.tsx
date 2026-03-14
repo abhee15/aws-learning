@@ -22,10 +22,53 @@ const TABS = [
   { id: 'mnemonics', label: 'Memory Aids', icon: <Zap className="w-4 h-4" /> },
 ];
 
-function renderContent(text: string) {
+function renderInline(text: string) {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
     .replace(/`(.*?)`/g, '<code class="bg-gray-800 text-aws-orange px-1.5 py-0.5 rounded text-xs font-mono">$1</code>');
+}
+
+function renderParagraph(para: string, pi: number) {
+  const lines = para.split('\n');
+  type Seg = { type: 'text' | 'list'; content: string[] };
+  const segments: Seg[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('- ')) {
+      if (segments.length && segments[segments.length - 1].type === 'list') {
+        segments[segments.length - 1].content.push(line.slice(2));
+      } else {
+        segments.push({ type: 'list', content: [line.slice(2)] });
+      }
+    } else {
+      if (segments.length && segments[segments.length - 1].type === 'text') {
+        segments[segments.length - 1].content.push(line);
+      } else {
+        segments.push({ type: 'text', content: [line] });
+      }
+    }
+  }
+
+  return (
+    <div key={pi} className="space-y-1.5">
+      {segments.map((seg, si) =>
+        seg.type === 'list' ? (
+          <ul key={si} className="space-y-1.5 mt-1">
+            {seg.content.map((item, ii) => (
+              <li key={ii} className="flex items-start gap-2.5">
+                <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-aws-orange/60 flex-shrink-0" />
+                <span className="text-sm text-gray-300 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: renderInline(item) }} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={si} className="text-sm text-gray-300 leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: renderInline(seg.content.join('\n')) }} />
+        )
+      )}
+    </div>
+  );
 }
 
 export function TopicPage() {
@@ -192,11 +235,8 @@ export function TopicPage() {
                       badge: readSections.includes(section.id) ? 'Read' : undefined,
                       content: (
                         <div className="mt-3">
-                          <div className="space-y-2 mb-4">
-                            {section.content.split('\n\n').map((para, pi) => (
-                              <p key={pi} className="text-sm text-gray-300 leading-relaxed"
-                                dangerouslySetInnerHTML={{ __html: renderContent(para) }} />
-                            ))}
+                          <div className="space-y-3 mb-4">
+                            {section.content.split('\n\n').map((para, pi) => renderParagraph(para, pi))}
                           </div>
                           {section.keyPoints.length > 0 && (
                             <div className="mb-4 space-y-2">

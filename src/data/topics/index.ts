@@ -2,6 +2,9 @@ import type { Topic } from '../../types/topic';
 import { globalInfrastructureTopic } from './globalInfrastructure';
 import { iamTopic } from './iam';
 import { vpcTopic } from './vpc';
+import { serverlessTopic } from './serverless';
+import { databasesTopic } from './databases';
+import { securityTopic } from './security';
 import { wellArchitectedTopic } from './wellArchitected';
 
 // Placeholder for topics not yet fully authored
@@ -49,14 +52,14 @@ export const allTopics: Topic[] = [
   vpcTopic,
   placeholderTopic('dns-cdn', 'dns-cdn', 'Route 53, CloudFront & Global Accelerator', 'DNS & CDN', 'Globe', 'cyan', 6),
   placeholderTopic('compute', 'compute', 'EC2, Auto Scaling & Load Balancing', 'Compute', 'Cpu', 'orange', 8),
-  placeholderTopic('serverless', 'serverless', 'Serverless: Lambda, API Gateway & Step Functions', 'Serverless', 'Zap', 'yellow', 7),
+  serverlessTopic,
   placeholderTopic('containers', 'containers', 'Containers: ECS, EKS & Fargate', 'Containers', 'Box', 'blue', 6),
   placeholderTopic('s3', 's3', 'Amazon S3 & Object Storage', 'S3', 'Cloud', 'green', 5),
   placeholderTopic('block-file-storage', 'block-file-storage', 'Block & File Storage: EBS, EFS & FSx', 'Block/File', 'HardDrive', 'gray', 5),
-  placeholderTopic('databases', 'databases', 'Databases: RDS, Aurora, DynamoDB & More', 'Databases', 'Database', 'indigo', 8),
+  databasesTopic,
   placeholderTopic('messaging', 'messaging', 'Messaging: SQS, SNS, EventBridge & Kinesis', 'Messaging', 'MessageSquare', 'pink', 5),
   placeholderTopic('observability', 'observability', 'Observability: CloudWatch, CloudTrail & Config', 'Observability', 'Eye', 'teal', 5),
-  placeholderTopic('security', 'security', 'Security: KMS, WAF, Shield & GuardDuty', 'Security', 'Lock', 'red', 7),
+  securityTopic,
   placeholderTopic('iac', 'iac', 'Infrastructure as Code: CloudFormation & CDK', 'IaC', 'GitBranch', 'violet', 4),
   placeholderTopic('networking', 'networking', 'Hybrid Networking: Direct Connect & VPN', 'Hybrid Net', 'Server', 'slate', 6),
   placeholderTopic('migration', 'migration', 'Migration Strategies & Tools', 'Migration', 'Truck', 'amber', 5),
