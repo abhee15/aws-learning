@@ -9,6 +9,9 @@ import { databasesTopic } from './databases';
 import { messagingTopic } from './messaging';
 import { securityTopic } from './security';
 import { networkingTopic } from './networking';
+import { containersTopic } from './containers';
+import { observabilityTopic } from './observability';
+import { disasterRecoveryTopic } from './disasterRecovery';
 import { wellArchitectedTopic } from './wellArchitected';
 
 // Placeholder for topics not yet fully authored
@@ -57,12 +60,12 @@ export const allTopics: Topic[] = [
   placeholderTopic('dns-cdn', 'dns-cdn', 'Route 53, CloudFront & Global Accelerator', 'DNS & CDN', 'Globe', 'cyan', 6),
   computeTopic,
   serverlessTopic,
-  placeholderTopic('containers', 'containers', 'Containers: ECS, EKS & Fargate', 'Containers', 'Box', 'blue', 6),
+  containersTopic,
   s3Topic,
   placeholderTopic('block-file-storage', 'block-file-storage', 'Block & File Storage: EBS, EFS & FSx', 'Block/File', 'HardDrive', 'gray', 5),
   databasesTopic,
   messagingTopic,
-  placeholderTopic('observability', 'observability', 'Observability: CloudWatch, CloudTrail & Config', 'Observability', 'Eye', 'teal', 5),
+  observabilityTopic,
   securityTopic,
   placeholderTopic('iac', 'iac', 'Infrastructure as Code: CloudFormation & CDK', 'IaC', 'GitBranch', 'violet', 4),
   networkingTopic,
@@ -71,7 +74,7 @@ export const allTopics: Topic[] = [
   placeholderTopic('ml', 'ml', 'Machine Learning: SageMaker & AI Services', 'ML/AI', 'Brain', 'fuchsia', 4),
   wellArchitectedTopic,
   placeholderTopic('cost-optimization', 'cost-optimization', 'Cost Optimization Strategies', 'Cost Opt', 'DollarSign', 'lime', 4),
-  placeholderTopic('disaster-recovery', 'disaster-recovery', 'Disaster Recovery Patterns', 'DR', 'RefreshCw', 'rose', 5),
+  disasterRecoveryTopic,
 ];
 
 export function getTopicBySlug(slug: string): Topic | undefined {
