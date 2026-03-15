@@ -3,8 +3,12 @@ import { globalInfrastructureTopic } from './globalInfrastructure';
 import { iamTopic } from './iam';
 import { vpcTopic } from './vpc';
 import { serverlessTopic } from './serverless';
+import { computeTopic } from './compute';
+import { s3Topic } from './s3';
 import { databasesTopic } from './databases';
+import { messagingTopic } from './messaging';
 import { securityTopic } from './security';
+import { networkingTopic } from './networking';
 import { wellArchitectedTopic } from './wellArchitected';
 
 // Placeholder for topics not yet fully authored
@@ -51,17 +55,17 @@ export const allTopics: Topic[] = [
   iamTopic,
   vpcTopic,
   placeholderTopic('dns-cdn', 'dns-cdn', 'Route 53, CloudFront & Global Accelerator', 'DNS & CDN', 'Globe', 'cyan', 6),
-  placeholderTopic('compute', 'compute', 'EC2, Auto Scaling & Load Balancing', 'Compute', 'Cpu', 'orange', 8),
+  computeTopic,
   serverlessTopic,
   placeholderTopic('containers', 'containers', 'Containers: ECS, EKS & Fargate', 'Containers', 'Box', 'blue', 6),
-  placeholderTopic('s3', 's3', 'Amazon S3 & Object Storage', 'S3', 'Cloud', 'green', 5),
+  s3Topic,
   placeholderTopic('block-file-storage', 'block-file-storage', 'Block & File Storage: EBS, EFS & FSx', 'Block/File', 'HardDrive', 'gray', 5),
   databasesTopic,
-  placeholderTopic('messaging', 'messaging', 'Messaging: SQS, SNS, EventBridge & Kinesis', 'Messaging', 'MessageSquare', 'pink', 5),
+  messagingTopic,
   placeholderTopic('observability', 'observability', 'Observability: CloudWatch, CloudTrail & Config', 'Observability', 'Eye', 'teal', 5),
   securityTopic,
   placeholderTopic('iac', 'iac', 'Infrastructure as Code: CloudFormation & CDK', 'IaC', 'GitBranch', 'violet', 4),
-  placeholderTopic('networking', 'networking', 'Hybrid Networking: Direct Connect & VPN', 'Hybrid Net', 'Server', 'slate', 6),
+  networkingTopic,
   placeholderTopic('migration', 'migration', 'Migration Strategies & Tools', 'Migration', 'Truck', 'amber', 5),
   placeholderTopic('analytics', 'analytics', 'Analytics: Athena, Glue, EMR & Kinesis', 'Analytics', 'BarChart3', 'emerald', 5),
   placeholderTopic('ml', 'ml', 'Machine Learning: SageMaker & AI Services', 'ML/AI', 'Brain', 'fuchsia', 4),
