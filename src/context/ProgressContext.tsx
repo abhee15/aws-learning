@@ -148,7 +148,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     if (totalSections === 0) return 0;
     const topic = progress.topics[topicSlug];
     if (!topic) return 0;
-    return Math.round((topic.sectionsRead.length / totalSections) * 100);
+    return Math.min(100, Math.round((topic.sectionsRead.length / totalSections) * 100));
   };
 
   const getTopicAccuracy = (topicSlug: string): number => {

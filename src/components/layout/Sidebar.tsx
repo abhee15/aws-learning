@@ -12,6 +12,7 @@ import {
 import { ROUTES, TOPIC_SLUGS } from '../../constants/routes';
 import { useProgress } from '../../context/ProgressContext';
 import { ProgressBar } from '../ui/ProgressBar';
+import { allTopics } from '../../data/topics';
 
 const topicNav = [
   { slug: TOPIC_SLUGS.GLOBAL_INFRA, label: 'Global Infrastructure', icon: Globe },
@@ -41,6 +42,10 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+const sectionCountBySlug: Record<string, number> = Object.fromEntries(
+  allTopics.map(t => [t.slug, t.subtopics.reduce((acc, st) => acc + st.sections.length, 0)])
+);
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const location = useLocation();
@@ -103,7 +108,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className="space-y-0.5 overflow-hidden"
               >
                 {topicNav.map(topic => {
-                  const completion = getTopicCompletion(topic.slug, 5);
+                  const completion = getTopicCompletion(topic.slug, sectionCountBySlug[topic.slug] ?? 1);
                   const isActive = location.pathname === ROUTES.TOPIC(topic.slug);
                   return (
                     <NavLink
