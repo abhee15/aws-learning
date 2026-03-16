@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AWS SA Pro Prep</title>
+    <script>
+      // SPA redirect for GitHub Pages.
+      // When a page is refreshed or deep-linked, GitHub serves this 404.html.
+      // We redirect to the root index.html and encode the intended path in the
+      // query string so the app can restore it before React Router initialises.
+      //
+      // Base path depth = 1 (for /aws-learning/).
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + 1).join('/') + '/?p=' +
+        encodeURIComponent(l.pathname.slice(1) + (l.search ? '&q=' + l.search.slice(1) : '') + l.hash)
+      );
+    </script>
+  </head>
+  <body></body>
+</html>
