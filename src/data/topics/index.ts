@@ -13,67 +13,36 @@ import { containersTopic } from './containers';
 import { observabilityTopic } from './observability';
 import { disasterRecoveryTopic } from './disasterRecovery';
 import { wellArchitectedTopic } from './wellArchitected';
+import { iacTopic } from './iac';
+import { dnsCdnTopic } from './dnsCdn';
+import { migrationTopic } from './migration';
+import { analyticsTopic } from './analytics';
+import { mlTopic } from './ml';
+import { blockFileStorageTopic } from './blockFileStorage';
+import { costOptimizationTopic } from './costOptimization';
 
-// Placeholder for topics not yet fully authored
-const placeholderTopic = (id: string, slug: string, title: string, shortTitle: string, icon: string, color: string, hours = 5): Topic => ({
-  id,
-  slug,
-  title,
-  shortTitle,
-  icon,
-  color,
-  examDomains: ['new-solutions'],
-  estimatedStudyHours: hours,
-  summaryBullets: [
-    `Comprehensive coverage of ${title} for SA Professional exam`,
-    'Key architecture patterns and service comparisons',
-    'Exam-focused tips and common gotchas',
-    'Service limits, quotas, and best practices',
-    'Scenario-based decision frameworks',
-  ],
-  relatedTopics: [],
-  subtopics: [
-    {
-      id: `${id}-overview`,
-      title: 'Overview & Key Concepts',
-      sections: [
-        {
-          id: `${id}-intro`,
-          title: `${title} — SA Pro Overview`,
-          content: `This section covers **${title}** at the depth required for the AWS Solutions Architect Professional exam. Content includes architecture patterns, service comparisons, limits, and exam-specific scenarios.\n\nFocus areas: service selection tradeoffs, integration patterns, security configurations, cost optimization strategies, and failure mode analysis.`,
-          keyPoints: [
-            { text: 'Understand core service capabilities and hard limits', examTip: true },
-            { text: 'Know when to choose this service vs alternatives (comparison tables)', examTip: true },
-            { text: 'Understand failure modes and HA configurations', examTip: true },
-            { text: 'Know pricing model and cost optimization strategies', examTip: true },
-          ],
-        },
-      ],
-    },
-  ],
-});
 
 export const allTopics: Topic[] = [
   globalInfrastructureTopic,
   iamTopic,
   vpcTopic,
-  placeholderTopic('dns-cdn', 'dns-cdn', 'Route 53, CloudFront & Global Accelerator', 'DNS & CDN', 'Globe', 'cyan', 6),
+  dnsCdnTopic,
   computeTopic,
   serverlessTopic,
   containersTopic,
   s3Topic,
-  placeholderTopic('block-file-storage', 'block-file-storage', 'Block & File Storage: EBS, EFS & FSx', 'Block/File', 'HardDrive', 'gray', 5),
+  blockFileStorageTopic,
   databasesTopic,
   messagingTopic,
   observabilityTopic,
   securityTopic,
-  placeholderTopic('iac', 'iac', 'Infrastructure as Code: CloudFormation & CDK', 'IaC', 'GitBranch', 'violet', 4),
+  iacTopic,
   networkingTopic,
-  placeholderTopic('migration', 'migration', 'Migration Strategies & Tools', 'Migration', 'Truck', 'amber', 5),
-  placeholderTopic('analytics', 'analytics', 'Analytics: Athena, Glue, EMR & Kinesis', 'Analytics', 'BarChart3', 'emerald', 5),
-  placeholderTopic('ml', 'ml', 'Machine Learning: SageMaker & AI Services', 'ML/AI', 'Brain', 'fuchsia', 4),
+  migrationTopic,
+  analyticsTopic,
+  mlTopic,
   wellArchitectedTopic,
-  placeholderTopic('cost-optimization', 'cost-optimization', 'Cost Optimization Strategies', 'Cost Opt', 'DollarSign', 'lime', 4),
+  costOptimizationTopic,
   disasterRecoveryTopic,
 ];
 

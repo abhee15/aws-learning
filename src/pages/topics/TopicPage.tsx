@@ -193,7 +193,7 @@ export function TopicPage() {
       </motion.div>
 
       {/* Tabs */}
-      <div className="bg-gray-900/60 border-b border-gray-800 px-4 sticky top-14 z-10 backdrop-blur-sm">
+      <div className="bg-gray-900/60 border-b border-gray-800 sticky top-14 z-10 backdrop-blur-sm">
         <Tabs tabs={TABS.map(t => ({
           ...t,
           count: t.id === 'compare' ? allComparisons.length || undefined :
