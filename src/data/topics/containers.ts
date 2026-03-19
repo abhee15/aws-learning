@@ -73,6 +73,20 @@ export const containersTopic: Topic = {
             { pillar: 'operational-excellence', text: 'Enable ECS Container Insights for cluster-level and service-level CPU/memory/network metrics — required for Service Auto Scaling metric-based decisions' },
             { pillar: 'cost-optimization', text: 'Use Fargate Spot capacity provider for batch processing, CI/CD workers, and background jobs — 70% savings with graceful interruption handling via SIGTERM' },
           ],
+          useCases: [
+            {
+              scenario: 'An ECS service is calling the AWS Secrets Manager API to retrieve database credentials. The task is failing with AccessDenied errors when calling secretsmanager:GetSecretValue, even though the EC2 worker node\'s IAM role has the permission.',
+              wrongChoices: ['Add Secrets Manager permissions to the ECS Task Execution Role', 'Embed the secret as a plaintext environment variable in the Task Definition'],
+              correctChoice: 'Add secretsmanager:GetSecretValue to the ECS Task Role (not the Execution Role). The Task Role grants permissions to your application code; the Execution Role grants permissions to the ECS infrastructure layer',
+              reasoning: 'Task Execution Role = ECS agent pulling images and writing logs. Task Role = your container code calling AWS services. Application code calling Secrets Manager needs the Task Role permission. This is a common exam gotcha — confusing which role grants which permissions.',
+            },
+            {
+              scenario: 'An ECS service runs with minimumHealthyPercent=50 and maximumPercent=150. A rolling deployment starts but the ALB health checks fail on new tasks, causing ECS to keep replacing them in an infinite loop. Production traffic is degraded.',
+              wrongChoices: ['Set minimumHealthyPercent=0 to allow all old tasks to be stopped immediately', 'Increase the task replacement timeout — the deployment will eventually succeed'],
+              correctChoice: 'Set minimumHealthyPercent=100 and maximumPercent=200 for production services. This ensures old tasks stay fully running until new tasks are proven healthy, then old tasks are drained',
+              reasoning: 'With minimumHealthyPercent=50, ECS stops half the old tasks before new tasks are healthy — degrading capacity during deployment. Setting 100/200 means ECS launches new tasks alongside existing ones, only stopping old tasks after new ones pass health checks.',
+            },
+          ],
         },
       ],
     },
@@ -108,6 +122,20 @@ export const containersTopic: Topic = {
                 ['Ecosystem', 'AWS tools only', 'Full Kubernetes ecosystem (Helm, ArgoCD)'],
                 ['Choose when', 'AWS-native team, simplicity priority', 'K8s expertise, multi-cloud, existing charts'],
               ],
+            },
+          ],
+          useCases: [
+            {
+              scenario: 'An EKS pod running a payment processing service needs to call DynamoDB and KMS APIs. The team added the required IAM policies to the EC2 node IAM role. The security team flags this as a violation — all pods on the node share those permissions.',
+              wrongChoices: ['Pass AWS credentials as environment variables in the pod spec (security risk — credentials in K8s secrets/env)', 'Create a separate node group just for payment pods with the restricted IAM role'],
+              correctChoice: 'Configure IRSA: create an IAM Role for the payment service, associate it with the Kubernetes Service Account using OIDC federation. Only pods using that Service Account assume the IAM Role',
+              reasoning: 'IRSA (IAM Roles for Service Accounts) provides pod-level IAM isolation. The payment pod\'s Service Account is annotated with the IAM Role ARN; the EKS OIDC provider federates the identity. Other pods on the same node get no DynamoDB/KMS access — least-privilege at the pod level.',
+            },
+            {
+              scenario: 'An EKS cluster uses Cluster Autoscaler. During traffic spikes, new pods remain Pending for 3-5 minutes waiting for new nodes to provision. The latency spike is unacceptable for the SLA.',
+              wrongChoices: ['Pre-warm the cluster by running always-on placeholder pods to keep extra nodes running (wastes cost)', 'Switch to Fargate for all pods — no node provisioning needed'],
+              correctChoice: 'Replace Cluster Autoscaler with Karpenter. Karpenter watches for unschedulable pods and provisions right-sized EC2 instances in seconds (not minutes), with support for Spot diversification',
+              reasoning: 'Cluster Autoscaler must wait for ASG to provision nodes (~2-3 min). Karpenter directly calls EC2 Fleet API and provisions nodes in ~60 seconds. It also selects optimal instance types and sizes based on pending pod requirements, eliminating the need for multiple node groups.',
             },
           ],
         },

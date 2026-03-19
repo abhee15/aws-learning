@@ -37,6 +37,20 @@ export const costOptimizationTopic: Topic = {
             { pillar: 'cost-optimization', text: 'Run AWS Compute Optimizer monthly — identify over-provisioned instances and migrate to rightsized or Graviton equivalents. Each instance family step down = 20-30% cost reduction.' },
             { pillar: 'operational-excellence', text: 'Set up Spot interruption handling in all Auto Scaling Groups — use lifecycle hooks + EventBridge to drain connections gracefully before Spot reclamation.' },
           ],
+          useCases: [
+            {
+              scenario: 'A company runs a large fleet of EC2 instances for a web application (always-on web tier) and batch data processing jobs (runs 8 hours daily). Their monthly EC2 bill is $120,000 — all On-Demand. How should they optimize purchasing?',
+              wrongChoices: ['Purchase Standard Reserved Instances for all instances including batch — batch jobs don\'t run 24/7 so unused RI hours are wasted', 'Use Spot Instances for the web tier — production web tier cannot tolerate interruptions'],
+              correctChoice: 'Buy Compute Savings Plans for the steady-state web tier baseline (1-year, all-upfront). Use Spot Instances with an Auto Scaling group for the batch jobs (fault-tolerant, can retry on interruption)',
+              reasoning: 'Savings Plans cover the always-on web tier automatically. Spot Instances are ideal for batch processing — if interrupted, the batch job retries. This combination typically reduces the bill by 50-70%: ~66% off web tier (SP) and ~80-90% off batch (Spot).',
+            },
+            {
+              scenario: 'A team recently migrated from m5.4xlarge instances to r5.4xlarge for more memory. After 2 months, AWS Compute Optimizer flags these instances as over-provisioned. Memory utilization is 22% and CPU is 8%. What is the recommended action?',
+              wrongChoices: ['Purchase Reserved Instances for the r5.4xlarge — locking in the over-provisioned size for 1-3 years', 'Ignore Compute Optimizer — the instances run fine and performance is more important than cost'],
+              correctChoice: 'Follow Compute Optimizer\'s recommendation to downsize to m5.xlarge or r5.xlarge. Migrate, validate performance under load, then purchase Savings Plans for the rightsized instances',
+              reasoning: 'Always rightsize before purchasing commitments. Compute Optimizer analyzes 14 days of CloudWatch metrics and recommends the minimum viable instance type. Purchasing RIs/SPs for over-provisioned instances locks in waste for 1-3 years. Rightsizing first, then committing, maximizes savings.',
+            },
+          ],
           comparisons: [
             {
               headers: ['Pricing Model', 'Discount vs On-Demand', 'Commitment', 'Interruptible', 'Best For'],

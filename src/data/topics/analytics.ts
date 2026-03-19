@@ -73,6 +73,20 @@ export const analyticsTopic: Topic = {
             { pillar: 'operational-excellence', text: 'Use Athena Workgroups with data scan limits per query — prevents runaway queries from generating unexpected costs. Set workgroup-level cost alerts via CloudWatch' },
             { pillar: 'performance', text: 'Use Partition Projection for time-series tables with daily/hourly partitions — eliminates partition metadata overhead and delivers 2-10x faster query planning' },
           ],
+          useCases: [
+            {
+              scenario: 'A startup stores application logs in S3 as raw JSON, one file per minute. An analyst runs Athena queries over 3 months of logs and is billed $480 for a single query that scanned 8 TB of data.',
+              wrongChoices: ['Move logs to Redshift to reduce Athena scan costs — adds infrastructure and ETL overhead', 'Reduce S3 log retention to 30 days to limit the data volume — loses historical analysis capability'],
+              correctChoice: 'Convert logs to Parquet with Snappy compression, partition by year/month/day using Glue ETL job. Athena will scan only the relevant date partitions and only needed columns — typical result: 95% cost reduction',
+              reasoning: 'Athena charges $5/TB scanned. Raw JSON forces full-column, full-file scans. Converting to Parquet: columnar format means Athena reads only queried columns. Adding date partitions means WHERE date=\'2024-03\' scans only March data. Combined: a query that cost $480 on 8TB JSON might cost $24 on 0.4TB Parquet.',
+            },
+            {
+              scenario: 'A security team needs to investigate whether any IAM role in any of their 200 AWS accounts made API calls to a specific S3 bucket over the past 90 days. CloudTrail is enabled with data events on the bucket across all accounts.',
+              wrongChoices: ['Download CloudTrail logs from all 200 accounts to a local machine and grep through them', 'Use CloudWatch Logs Insights — it queries CloudWatch Logs, not CloudTrail S3 files'],
+              correctChoice: 'Use Amazon Athena to query the centralized CloudTrail S3 bucket. Create an Athena table over the CloudTrail log path, partition by account/region/date, then run: SELECT useridentity.arn, eventtime FROM cloudtrail_logs WHERE requestparameters LIKE \'%sensitive-bucket%\'',
+              reasoning: 'CloudTrail delivers logs to S3. Athena can query S3 files directly using the cloudtrail_logs table. With partitioning by account and date, the query scans only relevant partitions across all 200 accounts. No need to move data or set up a separate log analysis platform.',
+            },
+          ],
         },
       ],
     },

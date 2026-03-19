@@ -110,6 +110,20 @@ export const s3Topic: Topic = {
             { pillar: 'operational-excellence', text: 'Enable S3 Server Access Logging or CloudTrail Data Events for all buckets containing sensitive data — provides audit trail of every GetObject and PutObject' },
             { pillar: 'security', text: 'Enable MFA Delete for versioned buckets containing compliance data — prevents deletion of object versions without MFA even by privileged users' },
           ],
+          useCases: [
+            {
+              scenario: 'A healthcare SaaS app stores patient records in S3. The security team needs to ensure EC2 instances in a private VPC can access their bucket, but the data must never traverse the public internet or be accessible from outside the VPC.',
+              wrongChoices: ['Use a pre-signed URL with very short TTL (1 second) to prevent public access', 'Attach a bucket policy denying all requests where aws:sourceIp is not the EC2 elastic IP'],
+              correctChoice: 'Create a VPC Gateway Endpoint for S3 and attach a bucket policy condition: Deny unless aws:SourceVpce equals the endpoint ID',
+              reasoning: 'A VPC Gateway Endpoint routes S3 traffic through the private AWS network without an internet gateway. The bucket policy aws:SourceVpce condition ensures only requests originating from the specific VPC endpoint are allowed, creating a private data perimeter.',
+            },
+            {
+              scenario: 'A media company allows users to upload videos to S3. They want users to upload directly to S3 without routing through application servers, but the upload must be authenticated and restricted to their own folder (users/{userId}/*).',
+              wrongChoices: ['Create a public bucket and validate the path in the application after upload', 'Give users direct IAM credentials with an S3 policy — risky, credentials in client apps'],
+              correctChoice: 'Backend generates a pre-signed URL for the specific s3://bucket/users/{userId}/filename path with a 15-minute expiry; client uploads directly to S3 using the pre-signed PUT URL',
+              reasoning: 'Pre-signed URLs embed temporary credentials signed by the backend IAM role. The URL is specific to the exact object key (users/{userId}/filename), so users can only upload to their own path. No credentials are exposed in the client app.',
+            },
+          ],
         },
         {
           id: 's3-replication',
@@ -120,6 +134,20 @@ export const s3Topic: Topic = {
             { text: 'Delete markers are NOT replicated by default — deletion of source objects does NOT delete replicated copies', examTip: true },
             { text: 'Object Lock Compliance mode: no one — not even root — can delete during retention period. Required for SEC 17a-4 and similar regulations', examTip: true },
             { text: 'Replication Time Control (RTC): 15-minute replication SLA for compliance — standard replication has no time guarantee', examTip: true },
+          ],
+          useCases: [
+            {
+              scenario: 'A financial firm stores trade records in S3. SEC Rule 17a-4 requires records be retained unaltered for 7 years and that even administrators cannot delete them during the retention period.',
+              wrongChoices: ['Enable S3 Versioning with MFA Delete — admins with MFA can still delete all versions', 'Use S3 Object Lock Governance mode — privileged admins can bypass Governance mode retention'],
+              correctChoice: 'Enable S3 Object Lock in Compliance mode with a 7-year retention period — no one (not even root) can delete or overwrite locked objects during the retention window',
+              reasoning: 'Compliance mode is absolute: no IAM permission, no root user override can remove the lock or shorten the retention period. Governance mode allows bypass with special IAM permissions, which fails the strict SEC 17a-4 non-alteration requirement.',
+            },
+            {
+              scenario: 'A company replicates S3 objects from us-east-1 to eu-west-1 using CRR. An engineer accidentally deletes 50 objects in the source bucket. The team checks the destination bucket and finds all 50 objects still exist.',
+              wrongChoices: ['Replication is broken — delete operations should have replicated to destination', 'The destination objects will be deleted after the replication delay catches up'],
+              correctChoice: 'This is expected behavior — delete markers are NOT replicated by default in S3 CRR. The destination bucket retains all objects, providing protection against accidental or malicious deletion',
+              reasoning: 'S3 replication intentionally does not replicate delete markers by default. This makes the destination a protected copy. You must explicitly enable delete marker replication if you want deletions to propagate — otherwise the replicated bucket serves as a safety net.',
+            },
           ],
         },
       ],

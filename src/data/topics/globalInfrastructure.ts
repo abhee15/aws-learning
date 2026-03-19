@@ -47,6 +47,14 @@ export const globalInfrastructureTopic: Topic = {
             { text: 'Regions are completely isolated — no data sharing between regions by default', examTip: true },
             { text: 'Some global services are not region-specific: IAM, Route 53, CloudFront, WAF', examTip: true },
           ],
+          useCases: [
+            {
+              scenario: 'A startup is launching a consumer app. Their engineering team is in San Francisco. Initial users are mostly in the US, but they plan to expand to Europe in 6 months. Which region should they deploy to initially?',
+              wrongChoices: ['eu-west-1 (Ireland) — centrally located between US and Europe for future expansion', 'ap-southeast-1 (Singapore) — globally central for future Asia expansion'],
+              correctChoice: 'us-east-1 (N. Virginia) — closest to the team for low-latency development, most complete service catalog, lowest pricing for most services, and easiest region to operate from as a starting point',
+              reasoning: 'us-east-1 is the primary AWS region: all new services launch here first, it has the broadest service availability, and pricing is often lowest. For a startup with US-centric initial users, us-east-1 is the correct first region. European expansion is handled via a second region deployment later — you don\'t pre-optimize for unconfirmed future requirements.',
+            },
+          ],
           comparisons: [
             {
               headers: ['Factor', 'Region Choice Impact'],
@@ -111,6 +119,14 @@ export const globalInfrastructureTopic: Topic = {
             { text: 'Local Zones: good for media rendering, gaming, ML inference needing <10ms', examTip: true },
             { text: 'Wavelength Zones: 5G mobile applications, real-time game streaming, AR/VR', examTip: true },
             { text: 'Outposts: hybrid cloud, data residency, latency requirements for on-prem', examTip: true },
+          ],
+          useCases: [
+            {
+              scenario: 'A mobile game company has players in Los Angeles experiencing 80ms latency to their us-east-1 game servers. Game state updates require <20ms for a good experience. Moving the entire backend to us-west-2 would require a major redeployment. What is the fastest path to reduce latency for LA players?',
+              wrongChoices: ['Migrate all backend services to us-west-2 — major redeployment risk and cost', 'Use CloudFront — it caches static content but cannot cache dynamic game state updates'],
+              correctChoice: 'Enable an AWS Local Zone in Los Angeles (us-west-2-lax-1). Deploy game server instances there. LA players connect to the Local Zone, reducing latency from 80ms to <5ms while the main region continues serving other players',
+              reasoning: 'Local Zones extend AWS infrastructure to metropolitan areas. The Los Angeles Local Zone is physically located in LA, providing single-digit millisecond latency to LA players. Only the latency-sensitive game servers need to run in the Local Zone — the rest of the backend (databases, analytics) can remain in us-east-1 or us-west-2.',
+            },
           ],
           comparisons: [
             {

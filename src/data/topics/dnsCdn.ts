@@ -38,6 +38,20 @@ export const dnsCdnTopic: Topic = {
             { pillar: 'performance', text: 'Use Latency-based routing for multi-region deployments — continuously routes users to the lowest-latency region based on AWS-measured latency data' },
             { pillar: 'security', text: 'Use Geolocation routing to comply with data residency requirements — route EU users only to EU regions for GDPR compliance' },
           ],
+          useCases: [
+            {
+              scenario: 'A company is migrating their API from us-east-1 to us-west-2. They want to gradually shift 10% of traffic to the new region for testing, then increase the percentage over 2 weeks if metrics look good, before shifting 100% and decommissioning the old region.',
+              wrongChoices: ['Use Failover routing — it only switches 100% on health check failure, not gradual shifting', 'Use Geolocation routing — that routes by geography, not by percentage split for gradual migration'],
+              correctChoice: 'Use Weighted routing: create two A records for the same domain — us-east-1 ALB with weight 90, us-west-2 ALB with weight 10. Gradually adjust weights over 2 weeks',
+              reasoning: 'Weighted routing distributes traffic proportionally by configured weights. Weight 90/10 = 90% to old region, 10% to new. Incrementally change to 70/30, 50/50, 20/80, then 0/100 to decommission. Setting old region weight to 0 sends all traffic to new region without deleting the record.',
+            },
+            {
+              scenario: 'A healthcare company serves patients in Germany and the US. German patient data must be stored and processed only in eu-central-1 per GDPR requirements. The US application uses us-east-1. Both use the same domain api.health.company.com.',
+              wrongChoices: ['Use Latency-based routing — it routes to the fastest region, which might route German users to us-east-1 if latency is similar', 'Use Weighted routing with 50/50 split — some German users will hit the US region, violating GDPR'],
+              correctChoice: 'Use Geolocation routing: Germany record → eu-central-1, US record → us-east-1, default record → eu-central-1 (safest default for GDPR). German users always route to EU regardless of latency',
+              reasoning: 'Geolocation routing is deterministic by location — a German IP address always resolves to the EU endpoint, regardless of which is faster. Latency-based routing could occasionally route EU users to the US if latency is lower, violating data residency requirements. Geolocation is the correct tool for compliance-driven routing.',
+            },
+          ],
           comparisons: [
             {
               headers: ['Policy', 'Route Based On', 'Use Case'],
@@ -73,6 +87,20 @@ export const dnsCdnTopic: Topic = {
             { pillar: 'security', text: 'Enable OAC on S3 origins and disable public access on the bucket — ensures all S3 content served only through CloudFront, preventing direct S3 URL access and bypassing WAF' },
             { pillar: 'performance', text: 'Use origin groups with primary and failover S3 origins for CloudFront — automatically fails over to secondary origin if primary returns 4xx/5xx errors' },
             { pillar: 'cost-optimization', text: 'Select appropriate Price Class — Price Class 100 (NA+EU only) can reduce costs 30-40% if users are concentrated in these regions' },
+          ],
+          useCases: [
+            {
+              scenario: 'A company stores product images in an S3 bucket. They use CloudFront to serve them. Recently, users have been accessing the S3 bucket URL directly (bypassing CloudFront) and seeing the images — this bypasses the WAF rules on CloudFront.',
+              wrongChoices: ['Enable S3 static website hosting and set the origin to the website URL — this makes the bucket public', 'Use signed URLs to protect every image request — adds complexity and overhead for public product images'],
+              correctChoice: 'Configure Origin Access Control (OAC) on the CloudFront distribution. Update the S3 bucket policy to only allow access from CloudFront\'s service principal. Block all direct S3 access',
+              reasoning: 'OAC makes CloudFront the only authorized caller of the S3 bucket. The bucket policy denies all requests except from the specific CloudFront distribution. Users going directly to S3 get Access Denied. All traffic flows through CloudFront, where WAF, geo-restriction, and other protections apply.',
+            },
+            {
+              scenario: 'Users report that after a website deployment, they still see old cached JavaScript files from CloudFront for up to an hour. The team is using CloudFront invalidations on every deployment but costs are growing as deployments increase.',
+              wrongChoices: ['Set TTL to 0 to disable caching — eliminates CloudFront\'s performance and cost benefits', 'Increase invalidation frequency — CloudFront charges $0.005 per invalidation path after the first 1000/month'],
+              correctChoice: 'Use content-hashed filenames (e.g., app.a1b2c3d4.js generated by webpack/Vite). Set long TTL (1 year) on assets. Only index.html needs a short TTL or invalidation — it references the new hashed filenames',
+              reasoning: 'Content-addressed assets (hash in filename) have unique URLs per version. New deploys = new filename = cache miss naturally. No invalidations needed. Only index.html (which references asset filenames) needs to be invalidated or have a short TTL. This eliminates invalidation costs while ensuring users always get fresh assets.',
+            },
           ],
         },
         {

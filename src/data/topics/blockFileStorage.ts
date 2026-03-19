@@ -38,6 +38,14 @@ export const blockFileStorageTopic: Topic = {
             { pillar: 'performance', text: 'Use io2 Block Express for latency-sensitive OLTP: sub-millisecond latency and 99.999% durability outweigh the cost premium for databases like SAP HANA or Oracle' },
             { pillar: 'reliability', text: 'Enable EBS-optimized instances: dedicated bandwidth between EC2 and EBS eliminates contention with network I/O, ensuring consistent storage performance' },
           ],
+          useCases: [
+            {
+              scenario: 'A database team runs PostgreSQL on a gp2 EBS volume (2 TiB). The database performs well during normal hours but experiences latency spikes during the morning batch jobs when IOPS exceed the burst threshold. Engineers suspect burst credit exhaustion. They need consistent high IOPS without over-sizing the volume.',
+              wrongChoices: ['Increase the gp2 volume to 5.3+ TiB to get 16,000 baseline IOPS — expensive, wastes storage, still uses burst model', 'Switch to an io2 volume — io2 costs significantly more per GB and per IOPS than gp3 for this use case'],
+              correctChoice: 'Migrate the gp2 volume to gp3 using Elastic Volumes (no downtime). Provision exactly 8,000 IOPS and 500 MB/s throughput on gp3 — no burst credits, consistent performance at lower cost than gp2',
+              reasoning: 'gp3 eliminates the burst credit model — IOPS and throughput are constant at the provisioned level. Elastic Volumes allows online modification from gp2 to gp3 with no downtime. gp3 is also 20% cheaper at baseline than gp2 with the same storage capacity. 8,000 IOPS handles both normal and batch workloads consistently.',
+            },
+          ],
           comparisons: [
             {
               headers: ['Volume Type', 'Max IOPS', 'Max Throughput', 'Durability', 'Boot', 'Use Case'],
@@ -89,6 +97,20 @@ export const blockFileStorageTopic: Topic = {
             { pillar: 'cost-optimization', text: 'Enable EFS Intelligent Tiering (lifecycle policy) to automatically move files not accessed in 7-90 days to EFS-IA tier — IA storage is 85% cheaper than Standard' },
             { pillar: 'security', text: 'Use EFS Access Points with IAM authorization — enforce that each application uses only its designated directory and identity, preventing cross-tenant data access in multi-container environments' },
             { pillar: 'performance', text: 'Use Elastic Throughput for unpredictable workloads: eliminates burst credit exhaustion and scales to 10 GiB/s reads automatically without manual provisioning' },
+          ],
+          useCases: [
+            {
+              scenario: 'A container platform runs 50 ECS Fargate tasks, each serving personalized content. Each task needs read/write access to user-uploaded files. EBS cannot be attached to multiple Fargate tasks. S3 has no POSIX interface. The application code uses standard file system calls (open/read/write).',
+              wrongChoices: ['Use S3 with a FUSE-based S3 mount on each container — high latency, not production-reliable, not officially supported', 'Give each task its own EBS volume with initial file copy — each task gets a separate copy, writes don\'t sync between tasks'],
+              correctChoice: 'Mount a shared EFS file system via the ECS task definition volumesFrom configuration. All 50 tasks mount the same EFS, sharing files with POSIX semantics. Use EFS Access Points to give each service its own namespace directory',
+              reasoning: 'EFS is the standard shared file system for ECS/Fargate. Fargate tasks can mount EFS natively via the task definition. Multiple tasks share the same EFS simultaneously. EFS Access Points enforce per-service directory isolation — the uploads service sees only /uploads, the thumbnails service sees only /thumbnails, on the same EFS.',
+            },
+            {
+              scenario: 'A DevOps team runs nightly data processing jobs. Each job reads 5 TB of data from EFS, processes it, and discards the output. The EFS bill is $1,500/month for 5 TB of Standard storage. The data is only read during nightly jobs — it sits untouched the other 23 hours.',
+              wrongChoices: ['Move to EFS One Zone to save 47% — still charges for all 5 TB even when idle', 'Delete and re-upload data for each nightly job — prohibitive data transfer time'],
+              correctChoice: 'Enable EFS Intelligent Tiering with a 1-day lifecycle policy. Files not accessed in 1 day move to EFS-IA (85% cheaper). The nightly job reads them (moves back to Standard briefly), then they tier back to IA. Monthly cost drops from $1,500 to ~$225',
+              reasoning: 'EFS-IA costs $0.025/GB vs Standard $0.30/GB. With a 1-day lifecycle: data processed nightly transitions back to IA during idle hours. Reads from IA have a per-GB retrieval fee ($0.01/GB) but at 5 TB/day that\'s $50/month — far less than Standard storage cost. Total monthly cost: ~$50 retrieval + ~$150 storage vs $1,500.',
+            },
           ],
           comparisons: [
             {

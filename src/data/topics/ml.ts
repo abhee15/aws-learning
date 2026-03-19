@@ -53,6 +53,20 @@ export const mlTopic: Topic = {
             { pillar: 'performance', text: 'Use Inference Recommender before production deployment — automated instance benchmarking finds the optimal cost/latency tradeoff without manual testing' },
             { pillar: 'reliability', text: 'Enable endpoint auto-scaling with SageMaker + Application Auto Scaling — set scale-in cooldown period to avoid thrashing during variable traffic spikes' },
           ],
+          useCases: [
+            {
+              scenario: 'A SaaS company offers a fraud detection model to 800 customers. Each customer has their own fine-tuned model variant stored in S3. Using dedicated endpoints for each model would cost $800×instance cost per month. Traffic to each customer model is sporadic — most see fewer than 100 requests per day.',
+              wrongChoices: ['Deploy all 800 models as separate real-time endpoints — 800× the endpoint cost', 'Use a single shared model — loses customer-specific tuning accuracy'],
+              correctChoice: 'Deploy a SageMaker Multi-Model Endpoint (MME): one endpoint instance hosts all 800 models. SageMaker loads models from S3 on demand and evicts least-recently-used models from memory',
+              reasoning: 'MME shares the endpoint infrastructure across all models. SageMaker automatically loads the requested model into memory on first invocation and evicts models when memory pressure occurs. Cost: one endpoint instead of 800. Best for many models with infrequent per-model traffic.',
+            },
+            {
+              scenario: 'A video streaming platform needs to classify the content category (sports, news, drama) of 50 million video thumbnails stored in S3. The classification must complete within 24 hours. A real-time endpoint would be idle after the job completes.',
+              wrongChoices: ['Create a real-time endpoint and call it 50 million times — endpoint sits idle after, wasting money', 'Use SageMaker Serverless Inference — cold starts would cause the 50M calls to take days'],
+              correctChoice: 'Use SageMaker Batch Transform: point it at the S3 input path (50M images), it spins up instances, classifies all images in parallel, writes results to S3, then terminates — no ongoing endpoint cost',
+              reasoning: 'Batch Transform is designed for exactly this pattern: large offline scoring jobs on S3 datasets. Instances are provisioned for the job duration and terminated on completion. No persistent endpoint cost. Processes millions of records in parallel much faster and cheaper than sequentially calling a real-time endpoint.',
+            },
+          ],
           comparisons: [
             {
               headers: ['Inference Type', 'Latency', 'Idle Cost', 'Max Payload', 'Use Case'],
@@ -85,6 +99,20 @@ export const mlTopic: Topic = {
             { pillar: 'cost-optimization', text: 'Use AI Services (Rekognition, Textract, Comprehend) before building custom SageMaker models — pre-trained APIs require no training data, no ML expertise, and no model management overhead' },
             { pillar: 'security', text: 'Use Comprehend PII detection + redaction in data pipelines before storing customer data in data lakes — automated compliance for GDPR and CCPA PII handling' },
             { pillar: 'operational-excellence', text: 'Use Amazon Fraud Detector with feedback loop — continuously retrain with confirmed fraud labels to improve detection accuracy over time' },
+          ],
+          useCases: [
+            {
+              scenario: 'A content platform needs to automatically flag uploaded videos that contain violence or adult content before they go live. The platform has no ML team and receives 100,000 video uploads per day. Each video must be reviewed within 5 minutes of upload.',
+              wrongChoices: ['Train a custom SageMaker model — requires labeled training data and ML expertise they don\'t have', 'Use Amazon Rekognition object detection — it detects objects but the specific content moderation labels are in Rekognition Content Moderation, a different API'],
+              correctChoice: 'Use Amazon Rekognition Content Moderation API: call DetectModerationLabels on video frames extracted from uploads. Returns labels like "Violence", "Explicit Nudity" with confidence scores. No training required',
+              reasoning: 'Rekognition Content Moderation is a pre-trained API specifically for detecting explicit/inappropriate content. No ML expertise or training data needed. Integration is a simple API call. For video: use StartContentModeration (async) for full video analysis. Confidence thresholds allow tuning precision vs recall.',
+            },
+            {
+              scenario: 'An e-commerce company wants to add product recommendations ("customers also bought") to their website. They have 3 years of order history (500M transactions) and 2M products. The team needs recommendations in under 100ms. They have no ML engineers.',
+              wrongChoices: ['Build a collaborative filtering model in SageMaker — requires ML expertise and significant training infrastructure', 'Use Amazon Kendra — it\'s an enterprise search service, not a recommendation engine'],
+              correctChoice: 'Use Amazon Personalize: import the purchase history as interaction data, let Personalize train recommendation models automatically, deploy the campaign endpoint. Call the GetRecommendations API in real-time from the website',
+              reasoning: 'Amazon Personalize is purpose-built for product/content recommendations. It uses the same ML technology as Amazon.com\'s recommendations. Import interaction data (user + item + timestamp + event type), choose a recipe (e.g., aws-user-personalization), train, and deploy. No ML knowledge required — Personalize handles algorithm selection, training, and hosting.',
+            },
           ],
           comparisons: [
             {

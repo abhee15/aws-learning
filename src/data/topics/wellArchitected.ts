@@ -54,6 +54,20 @@ export const wellArchitectedTopic: Topic = {
             { text: 'SQS dead-letter queues capture failed messages for analysis — always set up DLQ for Lambda SQS triggers in production', examTip: true },
             { text: 'Service quotas are often the hidden reliability risk — proactively request increases for EC2, Lambda concurrency, etc.', gotcha: true },
           ],
+          useCases: [
+            {
+              scenario: 'A payments API experiences a cascading failure: a database slowdown causes Lambda functions to wait for responses, exhausting the Lambda concurrency limit (1000), which causes the API to reject all requests — including health check endpoints needed by the upstream load balancer.',
+              wrongChoices: ['Increase Lambda concurrency limit — delays the problem but doesn\'t prevent cascading failures', 'Switch to a different database — the root cause is the architecture pattern, not the database'],
+              correctChoice: 'Apply bulkhead pattern: set Reserved Concurrency on the database-dependent Lambda (e.g., 800) and a separate Reserved Concurrency for health check Lambdas (e.g., 50). Add circuit breaker logic to detect DB slowness and return cached/fallback responses',
+              reasoning: 'Bulkheads isolate failure domains. Reserved Concurrency on the DB Lambda caps how many concurrent executions it can consume, protecting health check endpoints from being starved. A circuit breaker detects DB latency and fails fast (returns fallback) instead of waiting and consuming concurrency slots.',
+            },
+            {
+              scenario: 'A company wants to verify their disaster recovery plan actually works before a real incident. Their documented RTO is 4 hours for a full region failure. The last DR test was 2 years ago and the team has changed significantly.',
+              wrongChoices: ['Trust the DR documentation — if the runbook is detailed enough, it will work during an actual incident', 'Wait for a real incident to test the DR plan — the cost of a DR test is too high'],
+              correctChoice: 'Run a GameDay using AWS Fault Injection Simulator (FIS): inject a simulated AZ failure in a staging environment, execute the documented recovery runbook with the current team, and measure actual RTO vs documented RTO',
+              reasoning: 'The Reliability pillar requires testing recovery procedures regularly, not just documenting them. FIS enables controlled chaos experiments without impacting production. A GameDay reveals gaps: outdated runbooks, missing team knowledge, dependencies that weren\'t documented, and actual RTO vs assumed RTO. The only way to prove DR works is to test it.',
+            },
+          ],
         },
         {
           id: 'wa-performance',
@@ -75,6 +89,14 @@ export const wellArchitectedTopic: Topic = {
             { text: 'S3 Intelligent-Tiering has no retrieval fee but has a per-object monitoring fee ($0.0025/1000 objects/month) — not worth it for small objects', gotcha: true },
             { text: 'Reserved Instances can be shared across accounts in an Organization via RI Sharing — enabled by default', examTip: true },
             { text: 'Cost allocation tags must be activated in the Billing console to appear in Cost Explorer reports', gotcha: true },
+          ],
+          useCases: [
+            {
+              scenario: 'A company\'s AWS bill is $850,000/month. The CFO demands a 30% cost reduction within 6 months. The CTO doesn\'t know where to start. What is the right sequence of cost optimization actions?',
+              wrongChoices: ['Immediately purchase 3-year Reserved Instances for all EC2 instances — locks in potentially over-provisioned resources for 3 years', 'Shut down all non-production environments immediately — disrupts development without analysis'],
+              correctChoice: 'Follow the FinOps sequence: (1) Enable Cost Explorer + cost allocation tags to identify top spenders. (2) Run Compute Optimizer to rightsize. (3) Purchase Savings Plans for rightsized baseline. (4) Migrate applicable workloads to Spot. (5) Implement S3 Intelligent-Tiering and delete unattached EBS volumes',
+              reasoning: 'The Well-Architected Cost Optimization pillar requires understanding expenditure before committing. Buying RIs before rightsizing locks in waste. The correct sequence: visibility first (what am I spending?), optimize utilization second (eliminate waste), commit last (buy discounts for confirmed baseline). This approach typically achieves 30-50% savings.',
+            },
           ],
         },
         {

@@ -71,6 +71,20 @@ export const observabilityTopic: Topic = {
             { pillar: 'reliability', text: 'Use Composite Alarms to create high-confidence alerts (CPU AND memory simultaneously abnormal) — reduces false positive pages that cause alert fatigue' },
             { pillar: 'cost-optimization', text: 'Enable detailed monitoring only on instances in ASGs where 5-minute resolution causes insufficient scaling responsiveness — detailed monitoring adds ~$0.01/hour per instance' },
           ],
+          useCases: [
+            {
+              scenario: 'An e-commerce site\'s on-call team receives 200+ CloudWatch alerts per hour during peak events. Engineers are ignoring alerts due to fatigue. The root cause is often a single EC2 instance triggering CPU, memory, AND disk alerts simultaneously — creating 3 separate pages for one event.',
+              wrongChoices: ['Disable memory and disk alarms to reduce noise', 'Increase alarm thresholds so fewer alerts fire — risks missing real incidents'],
+              correctChoice: 'Create a Composite Alarm combining CPU AND memory AND disk alarms with AND logic. Replace individual alarms with the composite — one page per degraded instance instead of three',
+              reasoning: 'Composite Alarms evaluate multiple child alarms using AND/OR logic. A single unhealthy instance triggers one composite alarm instead of multiple individual alarms. This reduces alert volume while maintaining full signal coverage.',
+            },
+            {
+              scenario: 'A checkout Lambda processes orders. During year-end sales, the team wants to be alerted if Lambda error rates spike, but the error threshold varies — 5% errors is acceptable at 10 req/s but critical at 10,000 req/s. A fixed error count threshold generates false positives at low traffic.',
+              wrongChoices: ['Set alarm on Errors metric with a fixed threshold of 100 errors/minute', 'Use CloudWatch Logs Insights to manually check error counts after incidents'],
+              correctChoice: 'Create a CloudWatch metric math expression: errorRate = errors/invocations × 100. Set an alarm on errorRate > 1% to alert on relative error rate regardless of traffic volume',
+              reasoning: 'Metric math computes derived metrics from existing CloudWatch metrics. An error rate alarm (errors/invocations) is traffic-aware — it fires at 1% regardless of whether that\'s 1 error at low traffic or 100 errors during peak, giving meaningful signal at any scale.',
+            },
+          ],
         },
         {
           id: 'obs-cloudwatch-logs',
@@ -109,6 +123,20 @@ export const observabilityTopic: Topic = {
             { pillar: 'security', text: 'Enable CloudTrail data events for S3 buckets containing PII or compliance data — required to answer "who accessed this object?" during incident investigation' },
             { pillar: 'reliability', text: 'Deliver CloudTrail to S3 with Object Lock (Compliance mode) in a dedicated log archive account — prevents log tampering even by privileged users' },
             { pillar: 'operational-excellence', text: 'Create CloudWatch Metrics Filters on CloudTrail logs for: root account usage, failed console logins, security group changes, MFA device changes — alert immediately on suspicious activity' },
+          ],
+          useCases: [
+            {
+              scenario: 'A security team discovers that someone deleted a critical RDS instance last Tuesday at 3 PM. They need to determine who made the deletion call, from which IP address, and whether it was via the console or CLI — within the next hour.',
+              wrongChoices: ['Check CloudWatch metrics for the RDS instance — CPU/connections drop when it was deleted', 'Check the RDS event log — it shows instance events but not the initiating user identity'],
+              correctChoice: 'Search CloudTrail in the relevant region for DeleteDBInstance API calls on that date/time — CloudTrail records who (userIdentity), when (eventTime), from where (sourceIPAddress), and via what tool (userAgent)',
+              reasoning: 'CloudTrail is the authoritative source for "who did what" questions. Every AWS API call including DeleteDBInstance is logged with full caller context: IAM user/role ARN, source IP, user agent (console vs CLI), and request parameters. CloudWatch metrics only tell you a resource changed, not who caused it.',
+            },
+            {
+              scenario: 'A company enables S3 data events in CloudTrail to audit access to a sensitive bucket. After one month, CloudTrail costs have increased by $3,000. The bucket receives 50 million GetObject requests per day.',
+              wrongChoices: ['Disable CloudTrail entirely to save costs — loses all audit capability', 'Keep data events on all S3 buckets but enable log compression'],
+              correctChoice: 'Scope S3 data events to only the specific sensitive bucket ARN using an advanced event selector, and optionally filter by eventName (e.g., only DeleteObject and PutObject, not GetObject reads)',
+              reasoning: 'Data events for high-volume S3 buckets can cost thousands per month at $0.10/100,000 events. Advanced event selectors let you filter by bucket ARN, prefix, or event type. If read auditing is not required, filtering out GetObject events can reduce data event volume by 95%+.',
+            },
           ],
         },
         {

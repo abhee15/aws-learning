@@ -37,6 +37,20 @@ export const migrationTopic: Topic = {
             { pillar: 'cost-optimization', text: 'Use Rehost for the first migration wave to achieve quick cloud footprint; then optimize in-cloud with Replatform (move to managed services) in wave 2' },
             { pillar: 'operational-excellence', text: 'Apply Refactor only to applications with clear business need for cloud-native capabilities — the highest effort strategy should have the highest ROI justification' },
           ],
+          useCases: [
+            {
+              scenario: 'A company is assessing 400 on-premises applications for cloud migration. They need to categorize each application and estimate migration effort. Application owners report that 15% of applications are rarely used internal tools that could be shut down.',
+              wrongChoices: ['Rehost all 400 applications to EC2 first, then optimize in the cloud', 'Refactor all applications to cloud-native microservices for maximum long-term benefit'],
+              correctChoice: 'Start with the 7 Rs assessment: Retire the unused 15% (immediate cost savings), Retain recently-upgraded apps, Rehost the bulk for speed, then selectively Replatform and Refactor high-value applications in later waves',
+              reasoning: 'The 7 Rs framework applies the right strategy per application. Retiring 60 unused apps eliminates migration cost and reduces cloud spend. Rehosting the remaining majority with MGN maximizes migration velocity. Refactoring only the highest-value apps avoids wasting engineering effort on low-ROI rewrites.',
+            },
+            {
+              scenario: 'A company wants to move their MySQL database from on-premises to Amazon Aurora MySQL with minimal downtime. The database is 2 TB and receives continuous writes 24/7. A weekend maintenance window of 4 hours is available for the final cutover.',
+              wrongChoices: ['Take a mysqldump backup, restore to Aurora, update DNS — but downtime equals the dump + restore time (~6-10 hours)', 'Use AWS Snowball to transfer the initial data — Snowball does not support live database replication'],
+              correctChoice: 'Use AWS DMS with CDC (Change Data Capture): initial full load from MySQL to Aurora, then continuously replicate binlog changes. During the 4-hour window: pause writes, let CDC catch up, then cut over DNS',
+              reasoning: 'DMS CDC maintains near-real-time replication after the initial load. Production runs unchanged until the cutover window. During cutover: stop the application, wait for DMS lag to reach 0 (seconds), update connection string, restart. Downtime = minutes, not hours.',
+            },
+          ],
           comparisons: [
             {
               headers: ['Strategy', 'Code Changes', 'Migration Speed', 'Cloud Benefit', 'Risk'],
@@ -70,6 +84,14 @@ export const migrationTopic: Topic = {
           bestPractices: [
             { pillar: 'operational-excellence', text: 'Run MGN test cutover waves before actual migration windows — validate that applications function correctly in AWS before committing to production cutover' },
             { pillar: 'reliability', text: 'Use Application Discovery Service to map server dependencies before migration sequencing — migrate dependent components together to avoid broken connections' },
+          ],
+          useCases: [
+            {
+              scenario: 'A company is lifting and shifting a 3-tier application (web, app, database) from VMware to AWS. After testing the migrated web and app tiers in AWS, they need to validate that the application works correctly before the production cutover date next Friday.',
+              wrongChoices: ['Launch the cutover immediately after replication completes — saves a step', 'Stop the source VMs during testing to ensure the replicated data is current'],
+              correctChoice: 'Use MGN\'s Test Cutover feature: launch test instances from current replicated data without stopping the source VMs or interrupting replication. Validate the application stack, then finalize production cutover during the maintenance window',
+              reasoning: 'MGN test cutover launches EC2 instances from point-in-time snapshots of the replicated disks. Source servers keep running and replication continues. The test environment lets you validate application function, database connectivity, and performance before committing to production cutover — zero production risk.',
+            },
           ],
         },
         {

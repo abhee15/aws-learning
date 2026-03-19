@@ -105,7 +105,15 @@ export const vpcTopic: Topic = {
                 ['Security Groups', 'Cannot attach SGs', 'Can attach SGs'],
               ]
             }
-          ]
+          ],
+          useCases: [
+            {
+              scenario: 'Private EC2 instances in three AZs need internet access for software updates. During an AZ failure, instances in the surviving AZs are generating unexpected data transfer charges and some update requests are failing.',
+              wrongChoices: ['Place a single NAT Gateway in the middle AZ to cover all three AZs and reduce cost', 'Use a NAT Instance with an Elastic IP in one AZ to share across subnets'],
+              correctChoice: 'Deploy one NAT Gateway per AZ and configure each AZ\'s private subnet route table to use only the NAT Gateway in the same AZ',
+              reasoning: 'Cross-AZ NAT traffic incurs data transfer charges ($0.01/GB each way). During an AZ failure, a NAT Gateway in the failed AZ becomes unavailable, breaking internet access for all other AZs routing through it. One NAT Gateway per AZ eliminates both cross-AZ charges and the single-point-of-failure.',
+            },
+          ],
         },
         {
           id: 'security-groups-nacls',
@@ -275,7 +283,21 @@ export const vpcTopic: Topic = {
                 ['On-premises access', 'No (VPC only)', 'Yes (via DX/VPN)'],
               ]
             }
-          ]
+          ],
+          useCases: [
+            {
+              scenario: 'Lambda functions in a private VPC call DynamoDB and S3 frequently. CloudWatch shows high NAT Gateway data processing charges — $800/month just for Lambda-to-S3 and Lambda-to-DynamoDB traffic.',
+              wrongChoices: ['Move Lambda functions to a public subnet to avoid NAT Gateway entirely', 'Switch Lambda to run outside the VPC — loses VPC security benefits'],
+              correctChoice: 'Create a Gateway Endpoint for S3 and another for DynamoDB in the VPC. Update route tables for the private subnets to route S3/DynamoDB traffic through the endpoints',
+              reasoning: 'Gateway Endpoints are free and route S3/DynamoDB traffic directly through the AWS network, bypassing the NAT Gateway. Eliminating NAT charges for high-volume S3/DynamoDB traffic typically saves hundreds to thousands of dollars per month.',
+            },
+            {
+              scenario: 'A SaaS company wants to expose a private internal API (running behind an NLB) to 50 enterprise customers, each in their own VPC with potentially overlapping CIDR ranges. VPC peering would require complex CIDR coordination.',
+              wrongChoices: ['Set up 50 VPC peering connections and manage overlapping CIDR with custom routing', 'Make the API public with IP allowlisting — increases attack surface'],
+              correctChoice: 'Expose the NLB via AWS PrivateLink. Each customer creates an Interface VPC Endpoint in their VPC pointing to your PrivateLink service — CIDRs do not need to be unique',
+              reasoning: 'PrivateLink does not require VPC peering or non-overlapping CIDRs. Each customer endpoint uses a private IP from their own VPC CIDR. Traffic stays on the AWS network, and customers never need routing changes or CIDR coordination.',
+            },
+          ],
         }
       ]
     },
